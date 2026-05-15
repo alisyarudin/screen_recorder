@@ -14,4 +14,8 @@ class SettingsCubit extends Cubit<RecorderSettings> {
   Future<void> setFfmpegPath(String path) => update(state.copyWith(ffmpegPath: path));
   Future<void> setQuality(String q) => update(state.copyWith(quality: q));
   Future<void> setAlwaysOnTop(bool v) => update(state.copyWith(alwaysOnTop: v));
+  Future<void> setFrameRate(String v) => update(state.copyWith(frameRate: v));
+  Future<void> setMaxResolution(String v) => update(state.copyWith(maxResolution: v));
+  Future<void> setUseHevc(bool v) => update(state.copyWith(useHevc: v));
+  Future<void> setServerControlUrl(String v) => update(state.copyWith(serverControlUrl: v));
 }

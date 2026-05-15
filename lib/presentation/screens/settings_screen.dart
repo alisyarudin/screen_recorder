@@ -9,6 +9,8 @@ import '../../core/settings_service.dart';
 import '../blocs/settings/settings_cubit.dart';
 import '../blocs/file_list/file_list_cubit.dart';
 
+// ignore_for_file: use_build_context_synchronously
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -43,9 +45,12 @@ class _SettingsBody extends StatefulWidget {
 class _SettingsBodyState extends State<_SettingsBody> {
   late TextEditingController _outputCtrl;
   late TextEditingController _ffmpegCtrl;
+  late TextEditingController _serverUrlCtrl;
   bool _checking = false;
   bool? _ffmpegOk;
   String? _resolvedFfmpeg;
+  bool _autoStart = false;
+  bool _hasAdminPassword = false;
 
   @override
   void initState() {
@@ -53,13 +58,22 @@ class _SettingsBodyState extends State<_SettingsBody> {
     final s = DI.settingsService.load();
     _outputCtrl = TextEditingController(text: s.outputDir);
     _ffmpegCtrl = TextEditingController(text: s.ffmpegPath);
+    _serverUrlCtrl = TextEditingController(text: s.serverControlUrl);
     if (Platform.isWindows) _checkFfmpeg();
+    if (Platform.isMacOS) _loadAdminStatus();
+  }
+
+  Future<void> _loadAdminStatus() async {
+    final autoStart = await DI.adminService.getAutoStartStatus();
+    final hasPw = await DI.adminService.hasAdminPassword();
+    if (mounted) setState(() { _autoStart = autoStart; _hasAdminPassword = hasPw; });
   }
 
   @override
   void dispose() {
     _outputCtrl.dispose();
     _ffmpegCtrl.dispose();
+    _serverUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -177,10 +191,91 @@ class _SettingsBodyState extends State<_SettingsBody> {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                _qualityDesc(settings.quality),
+                _qualityDesc(settings.quality, settings.useHevc),
                 style: TextStyle(color: c.textMuted, fontSize: 12),
               ),
             ),
+            const SizedBox(height: 20),
+
+            // ── Video size ────────────────────────────────────────────────────
+            _Section(c: c, label: 'UKURAN FILE VIDEO'),
+            const SizedBox(height: 10),
+
+            // Frame rate
+            Text('Frame Rate', style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 6),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: '15', label: Text('15 fps')),
+                ButtonSegment(value: '30', label: Text('30 fps')),
+              ],
+              selected: {settings.frameRate},
+              onSelectionChanged: (v) =>
+                  context.read<SettingsCubit>().setFrameRate(v.first),
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) return c.primary;
+                  return c.panel;
+                }),
+                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) return Colors.white;
+                  return c.text;
+                }),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                settings.frameRate == '15'
+                    ? '15 fps — file ~50% lebih kecil, cocok untuk rekaman UI/dokumen'
+                    : '30 fps — lebih halus, cocok untuk demo animasi/video',
+                style: TextStyle(color: c.textMuted, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Max resolution
+            Text('Resolusi Maksimal', style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 6),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'original', label: Text('Original')),
+                ButtonSegment(value: '1080p', label: Text('1080p')),
+                ButtonSegment(value: '720p', label: Text('720p')),
+              ],
+              selected: {settings.maxResolution},
+              onSelectionChanged: (v) =>
+                  context.read<SettingsCubit>().setMaxResolution(v.first),
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) return c.primary;
+                  return c.panel;
+                }),
+                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) return Colors.white;
+                  return c.text;
+                }),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                _resolutionDesc(settings.maxResolution),
+                style: TextStyle(color: c.textMuted, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // HEVC — macOS only
+            if (Platform.isMacOS) ...[
+              _SwitchRow(
+                c: c,
+                label: 'Gunakan HEVC (H.265)',
+                subtitle: 'File ~40% lebih kecil dari H.264 — membutuhkan macOS 13+',
+                value: settings.useHevc,
+                onChanged: (v) => context.read<SettingsCubit>().setUseHevc(v),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // ── Always on top ────────────────────────────────────────────────
@@ -286,6 +381,132 @@ class _SettingsBodyState extends State<_SettingsBody> {
               const SizedBox(height: 20),
             ],
 
+            // ── Admin ────────────────────────────────────────────────────────
+            _Section(c: c, label: 'ADMIN'),
+            const SizedBox(height: 8),
+
+            // Auto-start
+            _SwitchRow(
+              c: c,
+              label: 'Jalankan saat Login',
+              subtitle: 'App otomatis aktif saat PC dinyalakan (KeepAlive — restart jika ditutup paksa)',
+              value: _autoStart,
+              onChanged: Platform.isMacOS
+                  ? (v) async {
+                      final ok = v
+                          ? await DI.adminService.installAutoStart()
+                          : await DI.adminService.uninstallAutoStart();
+                      if (ok && mounted) setState(() => _autoStart = v);
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 10),
+
+            // Password admin
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: c.panel,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: c.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Password Admin',
+                            style: TextStyle(color: c.text, fontSize: 13)),
+                        Text(
+                          _hasAdminPassword
+                              ? 'Password sudah diatur — diperlukan untuk menutup app'
+                              : 'Belum diatur — siapapun bisa menutup app',
+                          style: TextStyle(
+                            color: _hasAdminPassword ? c.success : c.warn,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_hasAdminPassword)
+                    OutlinedButton(
+                      onPressed: () => _showChangePasswordDialog(c),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: c.primary,
+                        side: BorderSide(color: c.border),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      child: const Text('Ubah', style: TextStyle(fontSize: 12)),
+                    )
+                  else
+                    FilledButton(
+                      onPressed: () => _showSetPasswordDialog(c),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      child: const Text('Set Password', style: TextStyle(fontSize: 12)),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Server control URL
+            _Section(c: c, label: 'KONTROL DARI SERVER'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _serverUrlCtrl,
+              style: TextStyle(color: c.text, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'https://admin.perusahaan.com/agent-command',
+                hintStyle: TextStyle(color: c.textMuted, fontSize: 12),
+                filled: true,
+                fillColor: c.panel,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: c.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: c.border),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.save_outlined, size: 18, color: c.primary),
+                  tooltip: 'Simpan',
+                  onPressed: () async {
+                    final url = _serverUrlCtrl.text.trim();
+                    await context.read<SettingsCubit>().setServerControlUrl(url);
+                    DI.adminService.stopServerPolling();
+                    if (url.isNotEmpty) DI.adminService.startServerPolling(url);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('URL server disimpan')),
+                      );
+                    }
+                  },
+                ),
+              ),
+              onSubmitted: (url) async {
+                final trimmed = url.trim();
+                await context.read<SettingsCubit>().setServerControlUrl(trimmed);
+                DI.adminService.stopServerPolling();
+                if (trimmed.isNotEmpty) DI.adminService.startServerPolling(trimmed);
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Server merespons JSON: {"command":"exit"} untuk matikan app jarak jauh',
+                style: TextStyle(color: c.textMuted, fontSize: 11),
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // ── About ────────────────────────────────────────────────────────
             _Section(c: c, label: 'TENTANG'),
             const SizedBox(height: 8),
@@ -321,16 +542,162 @@ class _SettingsBodyState extends State<_SettingsBody> {
     );
   }
 
-  String _qualityDesc(String q) => switch (q) {
-        'low' => 'Rendah — file kecil, cocok untuk rekaman panjang (1.5 Mbps)',
-        'high' => 'Tinggi — kualitas terbaik, file besar (8 Mbps)',
-        _ => 'Sedang — keseimbangan kualitas dan ukuran file (4 Mbps)',
+  String _qualityDesc(String q, bool useHevc) => switch (q) {
+        'low' => useHevc
+            ? 'Rendah — ~800 Kbps (HEVC), cocok untuk rekaman panjang'
+            : 'Rendah — ~1.5 Mbps, cocok untuk rekaman panjang',
+        'high' => useHevc
+            ? 'Tinggi — ~4 Mbps (HEVC), kualitas terbaik'
+            : 'Tinggi — ~8 Mbps, kualitas terbaik, file besar',
+        _ => useHevc
+            ? 'Sedang — ~2 Mbps (HEVC), keseimbangan kualitas dan ukuran'
+            : 'Sedang — ~4 Mbps, keseimbangan kualitas dan ukuran',
+      };
+
+  String _resolutionDesc(String r) => switch (r) {
+        '1080p' => '1080p — cap di 1920×1080, ideal untuk layar Retina/4K',
+        '720p' => '720p — cap di 1280×720, file paling kecil',
+        _ => 'Original — resolusi penuh display (bisa sangat besar di layar Retina)',
       };
 
   void _openMacOSSettings() {
     Process.run('open', [
       'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
     ]);
+  }
+
+  Future<void> _showSetPasswordDialog(AppColors c) async {
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Set Password Admin'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: newCtrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Password baru'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Konfirmasi password'),
+              onSubmitted: (_) => _doSetPassword(ctx, newCtrl.text, confirmCtrl.text),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => _doSetPassword(ctx, newCtrl.text, confirmCtrl.text),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    newCtrl.dispose();
+    confirmCtrl.dispose();
+  }
+
+  Future<void> _doSetPassword(BuildContext ctx, String pw, String confirm) async {
+    if (pw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password tidak boleh kosong')));
+      return;
+    }
+    if (pw != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konfirmasi password tidak cocok')));
+      return;
+    }
+    Navigator.pop(ctx);
+    final ok = await DI.adminService.setAdminPassword(pw);
+    if (mounted) {
+      setState(() => _hasAdminPassword = ok);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok ? 'Password admin berhasil diset' : 'Gagal menyimpan password')));
+    }
+  }
+
+  Future<void> _showChangePasswordDialog(AppColors c) async {
+    final oldCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ubah Password Admin'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldCtrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Password lama'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: newCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Password baru'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Konfirmasi password baru'),
+              onSubmitted: (_) =>
+                  _doChangePassword(ctx, oldCtrl.text, newCtrl.text, confirmCtrl.text),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                _doChangePassword(ctx, oldCtrl.text, newCtrl.text, confirmCtrl.text),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    oldCtrl.dispose();
+    newCtrl.dispose();
+    confirmCtrl.dispose();
+  }
+
+  Future<void> _doChangePassword(
+      BuildContext ctx, String old, String newPw, String confirm) async {
+    if (newPw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password baru tidak boleh kosong')));
+      return;
+    }
+    if (newPw != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konfirmasi password tidak cocok')));
+      return;
+    }
+    Navigator.pop(ctx);
+    final ok = await DI.adminService.changeAdminPassword(old, newPw);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok
+              ? 'Password berhasil diubah'
+              : 'Password lama salah — coba lagi')));
+    }
   }
 }
 
@@ -356,7 +723,7 @@ class _SwitchRow extends StatelessWidget {
   final String label;
   final String subtitle;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
   const _SwitchRow({
     required this.c,
     required this.label,
@@ -385,7 +752,11 @@ class _SwitchRow extends StatelessWidget {
                 ],
               ),
             ),
-            Switch(value: value, onChanged: onChanged, activeColor: c.primary),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeTrackColor: c.primary,
+            ),
           ],
         ),
       );

@@ -28,6 +28,8 @@
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
 		AABB11012233445500AABBCC /* ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB11002233445500AABBCC /* ScreenRecorder.swift */; };
+		AABB22012233445500AABBCC /* ActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB22002233445500AABBCC /* ActivityMonitor.swift */; };
+		AABB33012233445500AABBCC /* AdminHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB33002233445500AABBCC /* AdminHelper.swift */; };
 		4FA42D368A9F4FB31EADF9B5 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 506CC4D73311ADF82D0EF8C3 /* Pods_RunnerTests.framework */; };
 		D5353127B520F2C27AD5DE2E /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5FE78814B3A6562E8D656E2A /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -75,6 +77,8 @@
 		33CC10F72044A3C60003C045 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = "<group>"; };
 		33CC11122044BFA00003C045 /* MainFlutterWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainFlutterWindow.swift; sourceTree = "<group>"; };
 		AABB11002233445500AABBCC /* ScreenRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRecorder.swift; sourceTree = "<group>"; };
+		AABB22002233445500AABBCC /* ActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMonitor.swift; sourceTree = "<group>"; };
+		AABB33002233445500AABBCC /* AdminHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminHelper.swift; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
 		33CEB47722A0578A004F2AC0 /* Flutter-Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Flutter-Generated.xcconfig"; path = "ephemeral/Flutter-Generated.xcconfig"; sourceTree = "<group>"; };
@@ -180,6 +184,8 @@
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				AABB11002233445500AABBCC /* ScreenRecorder.swift */,
+				AABB22002233445500AABBCC /* ActivityMonitor.swift */,
+				AABB33002233445500AABBCC /* AdminHelper.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
@@ -444,6 +450,8 @@
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 				AABB11012233445500AABBCC /* ScreenRecorder.swift in Sources */,
+				AABB22012233445500AABBCC /* ActivityMonitor.swift in Sources */,
+				AABB33012233445500AABBCC /* AdminHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

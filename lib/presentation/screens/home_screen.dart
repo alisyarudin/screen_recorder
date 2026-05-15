@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../blocs/recording/recording_bloc.dart';
 import '../blocs/file_list/file_list_cubit.dart';
+import '../blocs/monitoring/monitoring_cubit.dart';
 import '../../data/models/recording_entry.dart';
+import 'dashboard_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +22,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     context.read<FileListCubit>().load();
+    // Auto-start monitoring saat app dibuka
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<MonitoringCubit>().startMonitoring();
+    });
   }
 
   @override
@@ -72,6 +78,13 @@ class _TitleBar extends StatelessWidget {
               tooltip: 'Muat Ulang Daftar',
               icon: Icon(Icons.refresh_rounded, color: c.textMuted, size: 18),
               onPressed: () => context.read<FileListCubit>().load(),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Dashboard Monitoring',
+            icon: Icon(Icons.monitor_heart_outlined, color: c.textMuted, size: 18),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DashboardScreen()),
             ),
           ),
           IconButton(

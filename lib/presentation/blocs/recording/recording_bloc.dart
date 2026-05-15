@@ -40,6 +40,9 @@ class RecordingBloc extends Bloc<RecordingEvent, RecordingState> {
       outputDir: outputDir,
       ffmpegPath: settings.ffmpegPath,
       quality: quality,
+      frameRate: settings.frameRate,
+      maxResolution: settings.maxResolution,
+      useHevc: settings.useHevc,
     );
 
     if (filePath == null) return;

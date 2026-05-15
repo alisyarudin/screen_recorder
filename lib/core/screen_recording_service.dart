@@ -35,7 +35,13 @@ class ScreenRecordingService {
 
   // ─── macOS: native ScreenCaptureKit ───────────────────────────────────────
 
-  Future<String?> _macosStart(String outputPath, RecordingQuality quality) async {
+  Future<String?> _macosStart(
+    String outputPath,
+    RecordingQuality quality, {
+    String frameRate = '30',
+    String maxResolution = 'original',
+    bool useHevc = false,
+  }) async {
     final qualityStr = switch (quality) {
       RecordingQuality.low => 'low',
       RecordingQuality.high => 'high',
@@ -46,6 +52,9 @@ class ScreenRecordingService {
       final result = await _channel.invokeMethod<Map>('startNativeRecording', {
         'outputPath': outputPath,
         'quality': qualityStr,
+        'frameRate': frameRate,
+        'maxResolution': maxResolution,
+        'useHevc': useHevc,
       });
       final success = result?['success'] as bool? ?? false;
       if (success) {
@@ -117,15 +126,17 @@ class ScreenRecordingService {
   Future<String?> _windowsStart(
     String outputPath,
     String ffmpegPath,
-    RecordingQuality quality,
-  ) async {
+    RecordingQuality quality, {
+    String frameRate = '30',
+    String maxResolution = 'original',
+  }) async {
     final exe = await findFfmpeg(ffmpegPath);
     if (exe == null) {
       _errorController.add('ffmpeg_not_found');
       return null;
     }
 
-    final args = _windowsArgs(outputPath, quality);
+    final args = _windowsArgs(outputPath, quality, frameRate, maxResolution);
     appLogger.d('ScreenRecording (FFmpeg): ${([exe] + args).join(' ')}');
 
     final stderrLines = <String>[];
@@ -193,20 +204,30 @@ class ScreenRecordingService {
     return null;
   }
 
-  List<String> _windowsArgs(String outputPath, RecordingQuality quality) {
+  List<String> _windowsArgs(
+    String outputPath,
+    RecordingQuality quality,
+    String frameRate,
+    String maxResolution,
+  ) {
     final (preset, crf) = switch (quality) {
       RecordingQuality.low => ('ultrafast', '35'),
       RecordingQuality.medium => ('fast', '28'),
       RecordingQuality.high => ('medium', '23'),
     };
+    final scaleFilter = switch (maxResolution) {
+      '1080p' => 'scale=1920:-2,',
+      '720p' => 'scale=1280:-2,',
+      _ => '',
+    };
     return [
       '-f', 'gdigrab',
-      '-framerate', '30',
+      '-framerate', frameRate,
       '-i', 'desktop',
       '-vcodec', 'libx264',
       '-preset', preset,
       '-crf', crf,
-      '-vf', 'format=yuv420p',
+      '-vf', '${scaleFilter}format=yuv420p',
       '-y', outputPath,
     ];
   }
@@ -217,6 +238,9 @@ class ScreenRecordingService {
     required String outputDir,
     String ffmpegPath = '',
     RecordingQuality quality = RecordingQuality.medium,
+    String frameRate = '30',
+    String maxResolution = 'original',
+    bool useHevc = false,
   }) async {
     if (isRecording) return currentFile;
 
@@ -227,9 +251,21 @@ class ScreenRecordingService {
     final outputPath = '$outputDir${Platform.pathSeparator}REC_$timestamp.mp4';
 
     if (Platform.isMacOS) {
-      return _macosStart(outputPath, quality);
+      return _macosStart(
+        outputPath,
+        quality,
+        frameRate: frameRate,
+        maxResolution: maxResolution,
+        useHevc: useHevc,
+      );
     } else {
-      return _windowsStart(outputPath, ffmpegPath, quality);
+      return _windowsStart(
+        outputPath,
+        ffmpegPath,
+        quality,
+        frameRate: frameRate,
+        maxResolution: maxResolution,
+      );
     }
   }
 

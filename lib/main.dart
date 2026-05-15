@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
@@ -5,14 +6,39 @@ import 'core/di.dart';
 import 'presentation/blocs/recording/recording_bloc.dart';
 import 'presentation/blocs/settings/settings_cubit.dart';
 import 'presentation/blocs/file_list/file_list_cubit.dart';
+import 'presentation/blocs/monitoring/monitoring_cubit.dart';
 import 'presentation/screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await DI.init();
+
+  try {
+    await DI.init();
+  } on FileSystemException catch (e) {
+    // errno 35 = EAGAIN: Hive lock gagal karena instance lain sudah berjalan.
+    // LSMultipleInstancesProhibited di Info.plist seharusnya mencegah ini,
+    // tapi jika lolos (mis. debug mode), exit saja — instance lama tetap aktif.
+    if (e.osError?.errorCode == 35) {
+      exit(0);
+    }
+    rethrow;
+  }
+
+  // Mulai server polling jika URL dikonfigurasi
+  final settings = DI.settingsService.load();
+  if (settings.serverControlUrl.isNotEmpty) {
+    DI.adminService.startServerPolling(settings.serverControlUrl);
+  }
+
+  // Tangani perintah dari server
+  DI.adminService.serverCommands.listen((command) {
+    switch (command) {
+      case 'exit':
+        DI.adminService.quitApp();
+    }
+  });
 
   await windowManager.ensureInitialized();
-  final settings = DI.settingsService.load();
   await windowManager.waitUntilReadyToShow(
     WindowOptions(
       size: const Size(860, 600),
@@ -41,6 +67,7 @@ class ScreenRecorderApp extends StatelessWidget {
         BlocProvider(create: (_) => RecordingBloc()),
         BlocProvider(create: (_) => SettingsCubit()),
         BlocProvider(create: (_) => FileListCubit()),
+        BlocProvider(create: (_) => MonitoringCubit()),
       ],
       child: MaterialApp(
         title: 'Screen Recorder',

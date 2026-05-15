@@ -3,14 +3,22 @@ import 'package:hive/hive.dart';
 class RecorderSettings {
   final String outputDir;
   final String ffmpegPath;
-  final String quality; // 'low' | 'medium' | 'high'
+  final String quality;      // 'low' | 'medium' | 'high'
   final bool alwaysOnTop;
+  final String frameRate;    // '15' | '30'
+  final String maxResolution; // 'original' | '1080p' | '720p'
+  final bool useHevc;        // macOS only — H.265 vs H.264
+  final String serverControlUrl; // URL polling kontrol server (kosong = nonaktif)
 
   const RecorderSettings({
     this.outputDir = '',
     this.ffmpegPath = '',
     this.quality = 'medium',
     this.alwaysOnTop = false,
+    this.frameRate = '30',
+    this.maxResolution = 'original',
+    this.useHevc = false,
+    this.serverControlUrl = '',
   });
 
   RecorderSettings copyWith({
@@ -18,12 +26,20 @@ class RecorderSettings {
     String? ffmpegPath,
     String? quality,
     bool? alwaysOnTop,
+    String? frameRate,
+    String? maxResolution,
+    bool? useHevc,
+    String? serverControlUrl,
   }) =>
       RecorderSettings(
         outputDir: outputDir ?? this.outputDir,
         ffmpegPath: ffmpegPath ?? this.ffmpegPath,
         quality: quality ?? this.quality,
         alwaysOnTop: alwaysOnTop ?? this.alwaysOnTop,
+        frameRate: frameRate ?? this.frameRate,
+        maxResolution: maxResolution ?? this.maxResolution,
+        useHevc: useHevc ?? this.useHevc,
+        serverControlUrl: serverControlUrl ?? this.serverControlUrl,
       );
 
   Map<String, dynamic> toMap() => {
@@ -31,6 +47,10 @@ class RecorderSettings {
         'ffmpegPath': ffmpegPath,
         'quality': quality,
         'alwaysOnTop': alwaysOnTop,
+        'frameRate': frameRate,
+        'maxResolution': maxResolution,
+        'useHevc': useHevc,
+        'serverControlUrl': serverControlUrl,
       };
 
   factory RecorderSettings.fromMap(Map<dynamic, dynamic> m) => RecorderSettings(
@@ -38,6 +58,10 @@ class RecorderSettings {
         ffmpegPath: m['ffmpegPath'] as String? ?? '',
         quality: m['quality'] as String? ?? 'medium',
         alwaysOnTop: m['alwaysOnTop'] as bool? ?? false,
+        frameRate: m['frameRate'] as String? ?? '30',
+        maxResolution: m['maxResolution'] as String? ?? 'original',
+        useHevc: m['useHevc'] as bool? ?? false,
+        serverControlUrl: m['serverControlUrl'] as String? ?? '',
       );
 }
 

@@ -1,5 +1,7 @@
 import 'package:path_provider/path_provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'activity_monitor_service.dart';
+import 'admin_service.dart';
 import 'screen_recording_service.dart';
 import 'settings_service.dart';
 
@@ -8,6 +10,8 @@ class DI {
 
   static late final ScreenRecordingService screenRecordingService;
   static late final SettingsService settingsService;
+  static late final ActivityMonitorService activityMonitorService;
+  static late final AdminService adminService;
 
   static Future<void> init() async {
     final appDir = await getApplicationSupportDirectory();
@@ -17,5 +21,7 @@ class DI {
     await settingsService.init();
 
     screenRecordingService = ScreenRecordingService();
+    activityMonitorService = ActivityMonitorService();
+    adminService = AdminService();
   }
 }
