@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/app_colors.dart';
+import '../blocs/history/history_cubit.dart';
 import '../blocs/recording/recording_bloc.dart';
+import 'history_screen.dart';
 import 'home_screen.dart';
 import 'dashboard_screen.dart';
 import 'settings_screen.dart';
@@ -32,6 +34,7 @@ class _MainShellState extends State<MainShell> {
               children: const [
                 HomeScreen(),
                 DashboardScreen(),
+                HistoryScreen(),
                 SettingsScreen(),
               ],
             ),
@@ -120,6 +123,16 @@ class _Sidebar extends StatelessWidget {
             c: c,
             onTap: () => onTap(1),
           ),
+          _NavItem(
+            icon: Icons.history_outlined,
+            label: 'Riwayat',
+            active: index == 2,
+            c: c,
+            onTap: () {
+              context.read<HistoryCubit>().load();
+              onTap(2);
+            },
+          ),
           const SizedBox(height: 8),
 
           // Nav group: SISTEM
@@ -127,9 +140,9 @@ class _Sidebar extends StatelessWidget {
           _NavItem(
             icon: Icons.settings_outlined,
             label: 'Pengaturan',
-            active: index == 2,
+            active: index == 3,
             c: c,
-            onTap: () => onTap(2),
+            onTap: () => onTap(3),
           ),
 
           const Spacer(),

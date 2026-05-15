@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/di.dart';
 import '../../../data/models/activity_entry.dart';
+import '../../../data/models/history_entry.dart';
 import 'monitoring_state.dart';
 
 export 'monitoring_state.dart';
@@ -63,6 +64,26 @@ class MonitoringCubit extends Cubit<MonitoringState> {
     final extraIdle = state.isIdle && state.idleStart != null
         ? now.difference(state.idleStart!)
         : Duration.zero;
+
+    // Save session to history
+    if (state.sessionStart != null) {
+      final totalIdleFinal = state.totalIdle + extraIdle;
+      final sessionDur = now.difference(state.sessionStart!);
+      final activeDur = sessionDur - totalIdleFinal;
+      final appSummary = state.appUsageSummary
+          .map((e) => AppUsageSummary(appName: e.key, duration: e.value))
+          .toList();
+      final session = HistorySession(
+        startTime: state.sessionStart!,
+        endTime: now,
+        activeDuration: activeDur > Duration.zero ? activeDur : Duration.zero,
+        idleDuration: totalIdleFinal,
+        appUsage: appSummary,
+        screenshotCount: state.screenshots.length,
+        recordingPaths: [],
+      );
+      await DI.historyService.saveSession(session);
+    }
 
     await DI.activityMonitorService.stopMonitoring();
 

@@ -7,6 +7,7 @@ import 'presentation/blocs/recording/recording_bloc.dart';
 import 'presentation/blocs/settings/settings_cubit.dart';
 import 'presentation/blocs/file_list/file_list_cubit.dart';
 import 'presentation/blocs/monitoring/monitoring_cubit.dart';
+import 'presentation/blocs/history/history_cubit.dart';
 import 'presentation/screens/main_shell.dart';
 
 Future<void> main() async {
@@ -68,6 +69,7 @@ class ScreenRecorderApp extends StatelessWidget {
         BlocProvider(create: (_) => SettingsCubit()),
         BlocProvider(create: (_) => FileListCubit()),
         BlocProvider(create: (_) => MonitoringCubit()),
+        BlocProvider(create: (_) => HistoryCubit()),
       ],
       child: MaterialApp(
         title: 'Screen Recorder',
