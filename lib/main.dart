@@ -7,7 +7,7 @@ import 'presentation/blocs/recording/recording_bloc.dart';
 import 'presentation/blocs/settings/settings_cubit.dart';
 import 'presentation/blocs/file_list/file_list_cubit.dart';
 import 'presentation/blocs/monitoring/monitoring_cubit.dart';
-import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/main_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -87,7 +87,7 @@ class ScreenRecorderApp extends StatelessWidget {
           useMaterial3: true,
         ),
         themeMode: ThemeMode.system,
-        home: const HomeScreen(),
+        home: const MainShell(),
       ),
     );
   }
