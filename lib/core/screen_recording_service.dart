@@ -242,6 +242,18 @@ class ScreenRecordingService {
     ];
   }
 
+  // ─── Permission ───────────────────────────────────────────────────────────
+
+  Future<bool> checkPermission() async {
+    if (!Platform.isMacOS) return true;
+    try {
+      final granted = await _channel.invokeMethod<bool>('requestPermission');
+      return granted ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ─── Unified API ──────────────────────────────────────────────────────────
 
   Future<String?> start({

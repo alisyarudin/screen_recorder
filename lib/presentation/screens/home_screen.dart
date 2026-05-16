@@ -25,10 +25,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     context.read<FileListCubit>().load();
-    // Auto-start monitoring saat app dibuka — hanya kalau setting menyala
-    // (default true). User bisa mematikan di Settings → Otomatisasi.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Trigger macOS permission dialog saat app pertama kali dibuka,
+      // sebelum user mencoba mulai rekam.
+      if (Platform.isMacOS) DI.screenRecordingService.checkPermission();
       final settings = DI.settingsService.load();
       if (!settings.autoStartMonitoring) return;
       context.read<MonitoringCubit>().startMonitoring();
