@@ -22,8 +22,12 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
 
+  // Flag untuk bypass cek password setelah verifikasi berhasil
+  private var _quitAuthorized = false
+
   // Semua jalur quit (NSApp.terminate) diintersep di sini — wajib password jika sudah di-set
   override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if _quitAuthorized { return .terminateNow }
     guard AdminHelper.hasPassword() else { return .terminateNow }
     DispatchQueue.main.async { self.showQuitPasswordDialog() }
     return .terminateCancel
@@ -32,6 +36,13 @@ class AppDelegate: FlutterAppDelegate {
   // ── Password dialogs ──────────────────────────────────────────────────────
 
   private func showQuitPasswordDialog() {
+    guard let window = NSApp.windows.first else { return }
+
+    // Tampilkan window agar sheet melekat dengan benar dan layar aktif
+    let wasHidden = !window.isVisible
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+
     let alert = NSAlert()
     alert.messageText = "Keluar dari Screen Recorder?"
     alert.informativeText = "Masukkan password admin untuk menutup aplikasi."
@@ -43,37 +54,20 @@ class AppDelegate: FlutterAppDelegate {
     field.placeholderString = "Password admin"
     alert.accessoryView = field
 
-    if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
-      alert.beginSheetModal(for: window) { [weak self] response in
-        guard response == .alertFirstButtonReturn else { return }
+    alert.beginSheetModal(for: window) { [weak self] response in
+      guard let self else { return }
+      if response == .alertFirstButtonReturn {
         if AdminHelper.verifyPassword(field.stringValue) {
+          self._quitAuthorized = true
           NSApp.terminate(nil)
         } else {
-          self?.showWrongPasswordAlert()
+          // Password salah — defer agar sheet pertama selesai dismiss dulu
+          DispatchQueue.main.async { self.showQuitPasswordDialog() }
         }
+      } else {
+        // User batal — sembunyikan window kembali jika sebelumnya tersembunyi
+        if wasHidden { window.orderOut(nil) }
       }
-    } else {
-      NSApp.activate(ignoringOtherApps: true)
-      let response = alert.runModal()
-      if response == .alertFirstButtonReturn,
-         AdminHelper.verifyPassword(field.stringValue) {
-        NSApp.terminate(nil)
-      } else if response == .alertFirstButtonReturn {
-        showWrongPasswordAlert()
-      }
-    }
-  }
-
-  private func showWrongPasswordAlert() {
-    let alert = NSAlert()
-    alert.messageText = "Password Salah"
-    alert.informativeText = "Password admin tidak sesuai. Aplikasi tetap berjalan."
-    alert.alertStyle = .critical
-    alert.addButton(withTitle: "OK")
-    if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
-      alert.beginSheetModal(for: window) { _ in }
-    } else {
-      alert.runModal()
     }
   }
 }
