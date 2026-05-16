@@ -39,14 +39,11 @@ class MainFlutterWindow: NSWindow {
       switch call.method {
 
       case "requestPermission":
-        if #available(macOS 12.3, *) {
-          SCShareableContent.getExcludingDesktopWindows(
-            false, onScreenWindowsOnly: false
-          ) { _, error in
-            DispatchQueue.main.async { result(error == nil) }
-          }
+        if CGPreflightScreenCaptureAccess() {
+          result(true)
         } else {
-          result(CGRequestScreenCaptureAccess())
+          CGRequestScreenCaptureAccess()
+          result(false)
         }
 
       case "openSystemSettings":
