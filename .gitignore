@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Bundled FFmpeg binary for Windows (downloaded by setup; not committed)
+/windows/ffmpeg/ffmpeg.exe

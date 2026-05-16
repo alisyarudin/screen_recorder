@@ -7,15 +7,32 @@ import 'logger.dart';
 class AdminService {
   static const _channel = MethodChannel('com.jasnita/admin');
 
+  // Platforms with a native MethodChannel implementation backing this service.
+  static bool get _hasNative => Platform.isMacOS || Platform.isWindows;
+
   final _commandController = StreamController<String>.broadcast();
   Stream<String> get serverCommands => _commandController.stream;
 
+  // Native asks Dart to run the quit-with-password flow (Windows tray "Keluar").
+  final _quitRequestedController = StreamController<void>.broadcast();
+  Stream<void> get quitRequested => _quitRequestedController.stream;
+
   Timer? _pollTimer;
 
-  // ── Password (hash disimpan di native UserDefaults) ──────────────────────
+  AdminService() {
+    if (_hasNative) {
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'onQuitRequested') {
+          _quitRequestedController.add(null);
+        }
+      });
+    }
+  }
+
+  // ── Password (hash SHA-256 disimpan di UserDefaults macOS / Registry Windows) ──
 
   Future<bool> setAdminPassword(String newPassword) async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       await _channel.invokeMethod('setAdminPassword', newPassword);
       return true;
@@ -27,7 +44,7 @@ class AdminService {
 
   /// Ganti password: verifikasi old dulu di native, lalu set new.
   Future<bool> changeAdminPassword(String oldPassword, String newPassword) async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       return await _channel.invokeMethod<bool>(
             'changeAdminPassword', {'old': oldPassword, 'new': newPassword}) ??
@@ -39,7 +56,7 @@ class AdminService {
   }
 
   Future<bool> clearAdminPassword() async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       await _channel.invokeMethod('clearAdminPassword');
       return true;
@@ -49,7 +66,7 @@ class AdminService {
   }
 
   Future<bool> hasAdminPassword() async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       return await _channel.invokeMethod<bool>('hasAdminPassword') ?? false;
     } catch (e) {
@@ -58,7 +75,7 @@ class AdminService {
   }
 
   Future<bool> verifyAdminPassword(String password) async {
-    if (!Platform.isMacOS) return true;
+    if (!_hasNative) return true;
     try {
       return await _channel.invokeMethod<bool>('verifyAdminPassword', password) ?? false;
     } catch (e) {
@@ -66,10 +83,10 @@ class AdminService {
     }
   }
 
-  // ── Auto-start (LaunchAgent dengan KeepAlive) ────────────────────────────
+  // ── Auto-start (LaunchAgent+KeepAlive macOS / Registry Run-key Windows) ──
 
   Future<bool> installAutoStart() async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       return await _channel.invokeMethod<bool>('installAutoStart') ?? false;
     } catch (e) {
@@ -79,7 +96,7 @@ class AdminService {
   }
 
   Future<bool> uninstallAutoStart() async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       return await _channel.invokeMethod<bool>('uninstallAutoStart') ?? false;
     } catch (e) {
@@ -88,7 +105,7 @@ class AdminService {
   }
 
   Future<bool> getAutoStartStatus() async {
-    if (!Platform.isMacOS) return false;
+    if (!_hasNative) return false;
     try {
       return await _channel.invokeMethod<bool>('getAutoStartStatus') ?? false;
     } catch (e) {
@@ -100,7 +117,7 @@ class AdminService {
 
   Future<void> quitApp() async {
     try {
-      if (Platform.isMacOS) {
+      if (_hasNative) {
         await _channel.invokeMethod('quitApp');
       } else {
         exit(0);
@@ -152,5 +169,6 @@ class AdminService {
   void dispose() {
     _pollTimer?.cancel();
     _commandController.close();
+    _quitRequestedController.close();
   }
 }

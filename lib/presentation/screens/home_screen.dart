@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
+import '../../core/di.dart';
 import '../blocs/recording/recording_bloc.dart';
 import '../blocs/file_list/file_list_cubit.dart';
 import '../blocs/monitoring/monitoring_cubit.dart';
@@ -24,9 +25,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     context.read<FileListCubit>().load();
-    // Auto-start monitoring saat app dibuka
+    // Auto-start monitoring saat app dibuka — hanya kalau setting menyala
+    // (default true). User bisa mematikan di Settings → Otomatisasi.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<MonitoringCubit>().startMonitoring();
+      if (!mounted) return;
+      final settings = DI.settingsService.load();
+      if (!settings.autoStartMonitoring) return;
+      context.read<MonitoringCubit>().startMonitoring();
     });
   }
 

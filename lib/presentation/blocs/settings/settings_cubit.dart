@@ -18,4 +18,6 @@ class SettingsCubit extends Cubit<RecorderSettings> {
   Future<void> setMaxResolution(String v) => update(state.copyWith(maxResolution: v));
   Future<void> setUseHevc(bool v) => update(state.copyWith(useHevc: v));
   Future<void> setServerControlUrl(String v) => update(state.copyWith(serverControlUrl: v));
+  Future<void> setAutoStartRecording(bool v) => update(state.copyWith(autoStartRecording: v));
+  Future<void> setAutoStartMonitoring(bool v) => update(state.copyWith(autoStartMonitoring: v));
 }

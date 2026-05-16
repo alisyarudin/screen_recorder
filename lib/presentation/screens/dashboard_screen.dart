@@ -893,6 +893,20 @@ class _AppLogRow extends StatelessWidget {
                   '$durStr · $start – $end',
                   style: TextStyle(fontSize: 11, color: c.textMuted),
                 ),
+                if (entry.url != null && entry.url!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      entry.url!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        color: c.accent,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
               ],
             ),
           ),

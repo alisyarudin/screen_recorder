@@ -92,11 +92,21 @@ class ScreenRecordingService {
 
   Future<String?> findFfmpeg(String customPath) async {
     if (customPath.isNotEmpty && await _tryExe(customPath)) return customPath;
+    final bundled = bundledFfmpegPath();
+    if (bundled != null && await _tryExe(bundled)) return bundled;
     if (await _tryExe('ffmpeg')) return 'ffmpeg';
     for (final p in _commonPaths()) {
       if (await _tryExe(p)) return p;
     }
     return null;
+  }
+
+  /// Path to ffmpeg.exe shipped next to the runner (CMake install step).
+  /// Returns null if running on a non-Windows platform.
+  String? bundledFfmpegPath() {
+    if (!Platform.isWindows) return null;
+    final dir = File(Platform.resolvedExecutable).parent.path;
+    return '$dir${Platform.pathSeparator}ffmpeg.exe';
   }
 
   Future<bool> checkAvailability(String ffmpegPath) async =>

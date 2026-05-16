@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Command ffmpeg -ErrorAction SilentlyContinue)",
+      "PowerShell($cmd = Get-Command ffmpeg -ErrorAction Ignore; if \\($cmd\\) { \"PATH: $\\($cmd.Source\\)\" } else { \"PATH: not found\" })",
+      "PowerShell($paths = @\\('C:\\\\ffmpeg\\\\bin\\\\ffmpeg.exe', \"$env:ProgramFiles\\\\ffmpeg\\\\bin\\\\ffmpeg.exe\", \"$env:ProgramData\\\\chocolatey\\\\bin\\\\ffmpeg.exe\", \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Links\\\\ffmpeg.exe\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { Write-Output \"FOUND: $p\" } else { Write-Output \"MISS:  $p\" } })",
+      "Bash(mkdir -p windows/ffmpeg && echo \"ready\")",
+      "PowerShell($ErrorActionPreference='Stop'; $url='https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'; $tmp=Join-Path $env:TEMP 'ffmpeg-essentials.zip'; Write-Output \"Downloading from $url ...\"; $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing; $size=[math]::Round\\(\\(Get-Item $tmp\\).Length/1MB,2\\); Write-Output \"Downloaded $size MB to $tmp\"; $tmpDir=Join-Path $env:TEMP 'ffmpeg-extract'; if \\(Test-Path $tmpDir\\) { Remove-Item -Recurse -Force $tmpDir }; Expand-Archive -Path $tmp -DestinationPath $tmpDir; $exe = Get-ChildItem -Path $tmpDir -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1; $dest = 'd:\\\\Android_flutter\\\\screen_recorder\\\\windows\\\\ffmpeg\\\\ffmpeg.exe'; Copy-Item -LiteralPath $exe.FullName -Destination $dest -Force; $destSize=[math]::Round\\(\\(Get-Item $dest\\).Length/1MB,2\\); Write-Output \"Placed ffmpeg.exe \\($destSize MB\\) at $dest\"; Remove-Item -Recurse -Force $tmpDir; Remove-Item -LiteralPath $tmp)",
+      "Bash(flutter --version)",
+      "Bash(flutter build *)",
+      "PowerShell($f = 'C:\\\\Users\\\\user\\\\Jasnita Screen Recorder\\\\2026\\\\05\\\\16\\\\REC_20260516_084511.mp4'; if \\(Test-Path $f\\) { $size = \\(Get-Item $f\\).Length; Write-Output \"OK: $f \\($\\([math]::Round\\($size/1KB,1\\)\\) KB\\)\" } else { Write-Output \"MISS: $f\" })",
+      "PowerShell(Get-Process screen_recorder -ErrorAction Ignore | ForEach-Object { Write-Output \"Killing pid $\\($_.Id\\)\"; Stop-Process -Id $_.Id -Force }; Get-Process ffmpeg -ErrorAction Ignore | ForEach-Object { Write-Output \"Killing ffmpeg pid $\\($_.Id\\)\"; Stop-Process -Id $_.Id -Force }; \"done\")",
+      "Bash(flutter clean *)",
+      "PowerShell(Get-Process screen_recorder, ffmpeg -ErrorAction Ignore | ForEach-Object { Stop-Process -Id $_.Id -Force }; \"cleaned\")",
+      "PowerShell(Get-Process screen_recorder, ffmpeg -ErrorAction Ignore | ForEach-Object { Stop-Process -Id $_.Id -Force }; \"killed\")"
+    ],
+    "additionalDirectories": [
+      "D:\\Android_flutter\\screen_recorder\\windows"
+    ]
+  }
+}

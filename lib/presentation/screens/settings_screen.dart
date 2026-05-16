@@ -89,6 +89,7 @@ class _SettingsToc extends StatelessWidget {
   Widget build(BuildContext context) {
     const sections = [
       'Folder Output',
+      'Otomatisasi',
       'Kualitas Video',
       'Ukuran File',
       'Jendela',
@@ -341,6 +342,41 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Otomatisasi ──────────────────────────────────────────────────
+            _SectionLabel(
+              c: c,
+              label: 'OTOMATISASI',
+              hint: 'Apa yang dijalankan otomatis saat aplikasi dibuka',
+            ),
+            const SizedBox(height: 10),
+            _SettingsCard(
+              c: c,
+              child: Column(
+                children: [
+                  _ToggleRow(
+                    c: c,
+                    label: 'Rekam Layar Otomatis',
+                    subtitle: 'Mulai rekaman MP4 saat aplikasi dibuka',
+                    isFirst: true,
+                    value: settings.autoStartRecording,
+                    onChanged: (v) =>
+                        context.read<SettingsCubit>().setAutoStartRecording(v),
+                  ),
+                  _ToggleRow(
+                    c: c,
+                    label: 'Monitoring Aktivitas Otomatis',
+                    subtitle:
+                        'Mulai pencatatan app, URL browser & idle saat aplikasi dibuka',
+                    isFirst: false,
+                    value: settings.autoStartMonitoring,
+                    onChanged: (v) =>
+                        context.read<SettingsCubit>().setAutoStartMonitoring(v),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),

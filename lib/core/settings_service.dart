@@ -9,6 +9,8 @@ class RecorderSettings {
   final String maxResolution; // 'original' | '1080p' | '720p'
   final bool useHevc;        // macOS only — H.265 vs H.264
   final String serverControlUrl; // URL polling kontrol server (kosong = nonaktif)
+  final bool autoStartRecording; // mulai rekam layar otomatis saat app dibuka
+  final bool autoStartMonitoring; // mulai monitoring aktivitas otomatis saat app dibuka
 
   const RecorderSettings({
     this.outputDir = '',
@@ -19,6 +21,8 @@ class RecorderSettings {
     this.maxResolution = 'original',
     this.useHevc = false,
     this.serverControlUrl = '',
+    this.autoStartRecording = true,
+    this.autoStartMonitoring = true,
   });
 
   RecorderSettings copyWith({
@@ -30,6 +34,8 @@ class RecorderSettings {
     String? maxResolution,
     bool? useHevc,
     String? serverControlUrl,
+    bool? autoStartRecording,
+    bool? autoStartMonitoring,
   }) =>
       RecorderSettings(
         outputDir: outputDir ?? this.outputDir,
@@ -40,6 +46,8 @@ class RecorderSettings {
         maxResolution: maxResolution ?? this.maxResolution,
         useHevc: useHevc ?? this.useHevc,
         serverControlUrl: serverControlUrl ?? this.serverControlUrl,
+        autoStartRecording: autoStartRecording ?? this.autoStartRecording,
+        autoStartMonitoring: autoStartMonitoring ?? this.autoStartMonitoring,
       );
 
   Map<String, dynamic> toMap() => {
@@ -51,6 +59,8 @@ class RecorderSettings {
         'maxResolution': maxResolution,
         'useHevc': useHevc,
         'serverControlUrl': serverControlUrl,
+        'autoStartRecording': autoStartRecording,
+        'autoStartMonitoring': autoStartMonitoring,
       };
 
   factory RecorderSettings.fromMap(Map<dynamic, dynamic> m) => RecorderSettings(
@@ -62,6 +72,8 @@ class RecorderSettings {
         maxResolution: m['maxResolution'] as String? ?? 'original',
         useHevc: m['useHevc'] as bool? ?? false,
         serverControlUrl: m['serverControlUrl'] as String? ?? '',
+        autoStartRecording: m['autoStartRecording'] as bool? ?? true,
+        autoStartMonitoring: m['autoStartMonitoring'] as bool? ?? true,
       );
 }
 

@@ -19,8 +19,10 @@ class FileListCubit extends Cubit<FileListState> {
       return;
     }
 
+    // Recordings are organised in year/month/day subdirectories
+    // (lihat ScreenRecordingService.start), so we must recurse.
     final files = await dir
-        .list()
+        .list(recursive: true)
         .where((e) => e is File && e.path.endsWith('.mp4'))
         .cast<File>()
         .asyncMap(RecordingEntry.fromFile)

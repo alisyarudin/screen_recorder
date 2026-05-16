@@ -9,6 +9,9 @@ import 'presentation/blocs/file_list/file_list_cubit.dart';
 import 'presentation/blocs/monitoring/monitoring_cubit.dart';
 import 'presentation/blocs/history/history_cubit.dart';
 import 'presentation/screens/main_shell.dart';
+import 'presentation/widgets/app_dialog.dart';
+
+final _navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +42,9 @@ Future<void> main() async {
     }
   });
 
+  // Tray "Keluar" (Windows) — native meminta UI menjalankan password flow.
+  DI.adminService.quitRequested.listen((_) => _handleQuitRequested());
+
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
     WindowOptions(
@@ -58,6 +64,28 @@ Future<void> main() async {
   runApp(const ScreenRecorderApp());
 }
 
+Future<void> _handleQuitRequested() async {
+  final needsPassword = await DI.adminService.hasAdminPassword();
+  if (!needsPassword) {
+    await DI.adminService.quitApp();
+    return;
+  }
+  // Ambil context setelah async gap — kalau widget tree sudah teardown,
+  // langsung quit tanpa dialog.
+  final ctx = _navigatorKey.currentContext;
+  if (ctx == null) {
+    await DI.adminService.quitApp();
+    return;
+  }
+  final verified = await showPasswordDialog(
+    ctx,
+    title: 'Keluar dari Screen Recorder?',
+    subtitle: 'Masukkan password admin untuk menutup aplikasi.',
+    confirmLabel: 'Keluar',
+  );
+  if (verified) await DI.adminService.quitApp();
+}
+
 class ScreenRecorderApp extends StatelessWidget {
   const ScreenRecorderApp({super.key});
 
@@ -72,6 +100,7 @@ class ScreenRecorderApp extends StatelessWidget {
         BlocProvider(create: (_) => HistoryCubit()),
       ],
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'Screen Recorder',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/app_colors.dart';
+import '../../core/di.dart';
 import '../blocs/history/history_cubit.dart';
 import '../blocs/recording/recording_bloc.dart';
 import 'history_screen.dart';
@@ -18,6 +19,22 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-start recording on launch if enabled in settings (default: on).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final settings = DI.settingsService.load();
+      if (!settings.autoStartRecording) return;
+      final bloc = context.read<RecordingBloc>();
+      if (bloc.state is RecordingActive || bloc.state is RecordingStarting) {
+        return;
+      }
+      bloc.add(StartRecording());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

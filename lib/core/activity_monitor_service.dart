@@ -7,26 +7,37 @@ import 'logger.dart';
 class ActivityMonitorService {
   static const _channel = MethodChannel('com.jasnita/activity_monitor');
 
+  // Platforms with a native MethodChannel implementation backing this service.
+  static bool get _hasNative => Platform.isMacOS || Platform.isWindows;
+
   final _appChangedController = StreamController<String>.broadcast();
   final _idleChangedController = StreamController<bool>.broadcast();
   final _screenshotController = StreamController<String>.broadcast();
+  final _urlChangedController = StreamController<String>.broadcast();
 
   Stream<String> get onAppChanged => _appChangedController.stream;
   Stream<bool> get onIdleChanged => _idleChangedController.stream;
   Stream<String> get onScreenshotTaken => _screenshotController.stream;
+  // Empty string means "no URL" (e.g. user switched to a non-browser window).
+  Stream<String> get onUrlChanged => _urlChangedController.stream;
 
   Timer? _idleTimer;
   Timer? _screenshotTimer;
+  Timer? _foregroundPollTimer;
 
   bool _wasIdle = false;
   int _idleThresholdSeconds = 60;
   String? _outputBaseDir;
+  String _lastForegroundApp = '';
+  String _lastUrl = '';
 
   ActivityMonitorService() {
-    if (Platform.isMacOS) {
+    if (_hasNative) {
       _channel.setMethodCallHandler((call) async {
         if (call.method == 'onAppChanged') {
           final app = call.arguments as String? ?? '';
+          if (app.isEmpty || app == _lastForegroundApp) return;
+          _lastForegroundApp = app;
           appLogger.d('[Monitor] App changed → $app');
           _appChangedController.add(app);
         }
@@ -42,14 +53,14 @@ class ActivityMonitorService {
     _idleThresholdSeconds = idleThresholdSeconds;
     _outputBaseDir = outputBaseDir;
 
-    if (Platform.isMacOS) {
+    if (_hasNative) {
       await _channel.invokeMethod('startActivityMonitoring');
       appLogger.i('[Monitor] Native monitoring started');
     }
 
     // Poll idle time every 5 s
     _idleTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (!Platform.isMacOS) return;
+      if (!_hasNative) return;
       try {
         final idle =
             await _channel.invokeMethod<double>('getIdleSeconds') ?? 0.0;
@@ -64,6 +75,34 @@ class ActivityMonitorService {
       }
     });
 
+    // Windows: poll foreground app every 2 s as a safety net alongside the
+    // native WinEventHook. The hook delivers push events but may miss focus
+    // changes if the message loop is busy; polling guarantees the UI updates.
+    // Same loop also polls the active browser tab's URL via UIA — empty string
+    // means "current window isn't a known browser" (or URL unavailable).
+    if (Platform.isWindows) {
+      _foregroundPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+        try {
+          final app =
+              await _channel.invokeMethod<String>('getForegroundApp') ?? '';
+          if (app.isNotEmpty && app != _lastForegroundApp) {
+            _lastForegroundApp = app;
+            appLogger.d('[Monitor] Foreground (poll) → $app');
+            _appChangedController.add(app);
+          }
+          final url =
+              await _channel.invokeMethod<String>('getActiveBrowserUrl') ?? '';
+          if (url != _lastUrl) {
+            _lastUrl = url;
+            if (url.isNotEmpty) appLogger.d('[Monitor] URL → $url');
+            _urlChangedController.add(url);
+          }
+        } catch (e) {
+          appLogger.e('[Monitor] poll error: $e');
+        }
+      });
+    }
+
     // Screenshot timer
     _startScreenshotTimer(screenshotIntervalSeconds);
   }
@@ -76,7 +115,7 @@ class ActivityMonitorService {
   }
 
   void _startScreenshotTimer(int seconds) {
-    if (seconds <= 0 || !Platform.isMacOS) return;
+    if (seconds <= 0 || !_hasNative) return;
     _screenshotTimer = Timer.periodic(Duration(seconds: seconds), (_) async {
       await _captureScreenshot();
     });
@@ -114,11 +153,15 @@ class ActivityMonitorService {
   Future<void> stopMonitoring() async {
     _idleTimer?.cancel();
     _screenshotTimer?.cancel();
+    _foregroundPollTimer?.cancel();
     _idleTimer = null;
     _screenshotTimer = null;
+    _foregroundPollTimer = null;
     _wasIdle = false;
+    _lastForegroundApp = '';
+    _lastUrl = '';
 
-    if (Platform.isMacOS) {
+    if (_hasNative) {
       try {
         await _channel.invokeMethod('stopActivityMonitoring');
         appLogger.i('[Monitor] Native monitoring stopped');
@@ -131,8 +174,10 @@ class ActivityMonitorService {
   void dispose() {
     _idleTimer?.cancel();
     _screenshotTimer?.cancel();
+    _foregroundPollTimer?.cancel();
     _appChangedController.close();
     _idleChangedController.close();
     _screenshotController.close();
+    _urlChangedController.close();
   }
 }

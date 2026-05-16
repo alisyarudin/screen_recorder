@@ -87,6 +87,18 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Bundled ffmpeg.exe — copied next to the runner so the app finds it without
+# requiring users to install FFmpeg separately. The binary is gitignored; run
+# the setup script (or drop ffmpeg.exe here manually) before building.
+set(BUNDLED_FFMPEG "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg/ffmpeg.exe")
+if(EXISTS "${BUNDLED_FFMPEG}")
+  install(FILES "${BUNDLED_FFMPEG}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Bundled FFmpeg not found at ${BUNDLED_FFMPEG} — Windows recording will fail at runtime unless the user installs FFmpeg or provides a custom path.")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

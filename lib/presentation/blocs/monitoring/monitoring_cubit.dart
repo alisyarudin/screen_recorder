@@ -12,6 +12,7 @@ class MonitoringCubit extends Cubit<MonitoringState> {
   StreamSubscription<String>? _appSub;
   StreamSubscription<bool>? _idleSub;
   StreamSubscription<String>? _screenshotSub;
+  StreamSubscription<String>? _urlSub;
   Timer? _tickTimer;
 
   MonitoringCubit() : super(MonitoringState.initial());
@@ -43,6 +44,7 @@ class MonitoringCubit extends Cubit<MonitoringState> {
     _idleSub = DI.activityMonitorService.onIdleChanged.listen(_onIdleChanged);
     _screenshotSub =
         DI.activityMonitorService.onScreenshotTaken.listen(_onScreenshotTaken);
+    _urlSub = DI.activityMonitorService.onUrlChanged.listen(_onUrlChanged);
 
     // Tick setiap detik agar durasi di UI ikut update
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -124,6 +126,19 @@ class MonitoringCubit extends Cubit<MonitoringState> {
     emit(state.copyWith(currentApp: appName, appLog: newLog));
   }
 
+  void _onUrlChanged(String url) {
+    // Refresh the current (still-open) app log entry's URL. Empty incoming
+    // string means we left a browser window — clear the URL on the entry.
+    if (state.appLog.isEmpty) return;
+    final newLog = List<AppUsageEntry>.from(state.appLog);
+    final last = newLog.last;
+    if (last.endTime != null) return; // not the active entry anymore
+    newLog[newLog.length - 1] = url.isEmpty
+        ? last.copyWith(clearUrl: true)
+        : last.copyWith(url: url);
+    emit(state.copyWith(appLog: newLog));
+  }
+
   void _onIdleChanged(bool isIdle) {
     final now = DateTime.now();
     if (isIdle && !state.isIdle) {
@@ -156,10 +171,12 @@ class MonitoringCubit extends Cubit<MonitoringState> {
     _appSub?.cancel();
     _idleSub?.cancel();
     _screenshotSub?.cancel();
+    _urlSub?.cancel();
     _tickTimer?.cancel();
     _appSub = null;
     _idleSub = null;
     _screenshotSub = null;
+    _urlSub = null;
     _tickTimer = null;
   }
 
