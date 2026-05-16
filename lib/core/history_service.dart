@@ -19,6 +19,8 @@ class HistoryService {
 
   HistoryDay? getDay(String dateKey) => _loadDay(dateKey);
 
+  Future<void> deleteDay(String dateKey) => _box.delete(dateKey);
+
   List<HistoryDay> getRecentDays(int count) {
     final days = <HistoryDay>[];
     final today = DateTime.now();

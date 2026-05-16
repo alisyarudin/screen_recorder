@@ -84,7 +84,7 @@ class RecordingBloc extends Bloc<RecordingEvent, RecordingState> {
         ? (Platform.environment['USERPROFILE'] ??
             '${Platform.environment['HOMEDRIVE']}${Platform.environment['HOMEPATH']}')
         : (Platform.environment['HOME'] ?? '/tmp');
-    return '$home${sep}ScreenRecordings';
+    return '$home${sep}Jasnita Screen Recorder';
   }
 
   @override

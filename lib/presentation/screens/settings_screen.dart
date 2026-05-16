@@ -1,7 +1,9 @@
 // ignore_for_file: use_build_context_synchronously
+import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../core/app_colors.dart';
@@ -9,6 +11,7 @@ import '../../core/di.dart';
 import '../../core/settings_service.dart';
 import '../blocs/settings/settings_cubit.dart';
 import '../blocs/file_list/file_list_cubit.dart';
+import '../widgets/app_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -92,6 +95,7 @@ class _SettingsToc extends StatelessWidget {
       'Izin macOS',
       'Admin',
       'Kontrol Server',
+      'Jaringan',
       'Tentang',
     ];
 
@@ -163,6 +167,11 @@ class _SettingsBodyState extends State<_SettingsBody> {
   bool _autoStart = false;
   bool _hasAdminPassword = false;
 
+  // Network
+  List<_NetAddr> _privateAddrs = [];
+  String? _publicIp;
+  bool _loadingPublicIp = false;
+
   @override
   void initState() {
     super.initState();
@@ -172,6 +181,34 @@ class _SettingsBodyState extends State<_SettingsBody> {
     _serverUrlCtrl = TextEditingController(text: s.serverControlUrl);
     if (Platform.isWindows) _checkFfmpeg();
     if (Platform.isMacOS) _loadAdminStatus();
+    _loadNetworkInfo();
+  }
+
+  Future<void> _loadNetworkInfo() async {
+    // Private IPs
+    try {
+      final ifaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      final addrs = ifaces
+          .expand((i) => i.addresses.map((a) => _NetAddr(iface: i.name, ip: a.address)))
+          .where((a) => !a.ip.startsWith('127.') && !a.ip.startsWith('169.254.'))
+          .toList();
+      if (mounted) setState(() => _privateAddrs = addrs);
+    } catch (_) {
+      if (mounted) setState(() => _privateAddrs = []);
+    }
+
+    // Public IP
+    if (mounted) setState(() => _loadingPublicIp = true);
+    try {
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+      final req = await client.getUrl(Uri.parse('https://api.ipify.org'));
+      final res = await req.close();
+      final body = await res.transform(const Utf8Decoder()).join();
+      client.close();
+      if (mounted) setState(() { _publicIp = body.trim(); _loadingPublicIp = false; });
+    } catch (_) {
+      if (mounted) setState(() { _publicIp = null; _loadingPublicIp = false; });
+    }
   }
 
   Future<void> _loadAdminStatus() async {
@@ -225,58 +262,10 @@ class _SettingsBodyState extends State<_SettingsBody> {
   }
 
   Future<void> _showSetPasswordDialog(AppColors c) async {
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Set Password Admin'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: newCtrl,
-              obscureText: true,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Password baru'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: confirmCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Konfirmasi password'),
-              onSubmitted: (_) => _doSetPassword(ctx, newCtrl.text, confirmCtrl.text),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => _doSetPassword(ctx, newCtrl.text, confirmCtrl.text),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-    newCtrl.dispose();
-    confirmCtrl.dispose();
-  }
-
-  Future<void> _doSetPassword(BuildContext ctx, String pw, String confirm) async {
-    if (pw.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password tidak boleh kosong')));
-      return;
-    }
-    if (pw != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Konfirmasi password tidak cocok')));
-      return;
-    }
-    Navigator.pop(ctx);
+    final result = await showSetPasswordDialog(context);
+    if (result == null) return;
+    final (pw, _) = result;
+    if (pw.isEmpty) return;
     final ok = await DI.adminService.setAdminPassword(pw);
     if (mounted) {
       setState(() => _hasAdminPassword = ok);
@@ -286,70 +275,10 @@ class _SettingsBodyState extends State<_SettingsBody> {
   }
 
   Future<void> _showChangePasswordDialog(AppColors c) async {
-    final oldCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ubah Password Admin'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: oldCtrl,
-              obscureText: true,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Password lama'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: newCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password baru'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: confirmCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Konfirmasi password baru'),
-              onSubmitted: (_) =>
-                  _doChangePassword(ctx, oldCtrl.text, newCtrl.text, confirmCtrl.text),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                _doChangePassword(ctx, oldCtrl.text, newCtrl.text, confirmCtrl.text),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-    oldCtrl.dispose();
-    newCtrl.dispose();
-    confirmCtrl.dispose();
-  }
-
-  Future<void> _doChangePassword(
-      BuildContext ctx, String old, String newPw, String confirm) async {
-    if (newPw.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password baru tidak boleh kosong')));
-      return;
-    }
-    if (newPw != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Konfirmasi password tidak cocok')));
-      return;
-    }
-    Navigator.pop(ctx);
-    final ok = await DI.adminService.changeAdminPassword(old, newPw);
+    final result = await showChangePasswordDialog(context);
+    if (result == null) return;
+    final (oldPw, newPw) = result;
+    final ok = await DI.adminService.changeAdminPassword(oldPw, newPw);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(ok
@@ -387,7 +316,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                         children: [
                           Expanded(
                             child: Text(
-                              _outputCtrl.text.isEmpty ? '~/ScreenRecordings (default)' : _outputCtrl.text,
+                              _outputCtrl.text.isEmpty ? '~/Jasnita Screen Recorder (default)' : _outputCtrl.text,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontFamily: 'monospace',
@@ -820,6 +749,50 @@ class _SettingsBodyState extends State<_SettingsBody> {
             ),
             const SizedBox(height: 20),
 
+            // ── Jaringan ─────────────────────────────────────────────────────
+            _SectionLabel(c: c, label: 'JARINGAN', hint: 'Alamat IP perangkat ini'),
+            const SizedBox(height: 10),
+            _SettingsCard(
+              c: c,
+              child: Column(
+                children: [
+                  // Private IPs
+                  if (_privateAddrs.isEmpty)
+                    _NetInfoRow(
+                      c: c,
+                      label: 'IP Privat',
+                      value: '—',
+                      icon: Icons.lan_outlined,
+                      isFirst: true,
+                    )
+                  else
+                    ..._privateAddrs.asMap().entries.map((e) => _NetInfoRow(
+                          c: c,
+                          label: e.key == 0 ? 'IP Privat' : '',
+                          sublabel: e.value.iface,
+                          value: e.value.ip,
+                          icon: Icons.lan_outlined,
+                          isFirst: e.key == 0,
+                        )),
+                  // Public IP
+                  _NetInfoRow(
+                    c: c,
+                    label: 'IP Publik',
+                    sublabel: 'Terlihat dari internet',
+                    value: _loadingPublicIp
+                        ? '…'
+                        : (_publicIp ?? 'Gagal memuat'),
+                    icon: Icons.public_outlined,
+                    isFirst: false,
+                    loading: _loadingPublicIp,
+                    onRefresh: _loadingPublicIp ? null : () => _loadNetworkInfo(),
+                    isError: !_loadingPublicIp && _publicIp == null,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // ── Tentang ──────────────────────────────────────────────────────
             _SectionLabel(c: c, label: 'TENTANG', hint: 'Informasi versi aplikasi'),
             const SizedBox(height: 10),
@@ -881,6 +854,14 @@ class _SettingsBodyState extends State<_SettingsBody> {
         'high' => useHevc ? '~4 Mbps' : '~8 Mbps',
         _ => useHevc ? '~2 Mbps' : '~4 Mbps',
       };
+}
+
+// ─── Data types ───────────────────────────────────────────────────────────────
+
+class _NetAddr {
+  final String iface;
+  final String ip;
+  const _NetAddr({required this.iface, required this.ip});
 }
 
 // ─── Shared UI primitives ─────────────────────────────────────────────────────
@@ -1306,6 +1287,204 @@ class _FfmpegStatus extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NetInfoRow extends StatefulWidget {
+  final AppColors c;
+  final String label;
+  final String? sublabel;
+  final String value;
+  final IconData icon;
+  final bool isFirst;
+  final bool loading;
+  final bool isError;
+  final VoidCallback? onRefresh;
+
+  const _NetInfoRow({
+    required this.c,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.isFirst,
+    this.sublabel,
+    this.loading = false,
+    this.isError = false,
+    this.onRefresh,
+  });
+
+  @override
+  State<_NetInfoRow> createState() => _NetInfoRowState();
+}
+
+class _NetInfoRowState extends State<_NetInfoRow> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.value));
+    setState(() => _copied = true);
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _copied = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final canCopy = !widget.loading && !widget.isError && widget.value != '—';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        border: Border(
+          top: widget.isFirst ? BorderSide.none : BorderSide(color: c.borderSoft),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Icon badge
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: widget.isError ? c.dangerSoft : c.bgMuted,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 15,
+              color: widget.isError ? c.danger : c.textSubtle,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Label + sublabel
+          SizedBox(
+            width: 110,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.label.isNotEmpty)
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: c.text,
+                    ),
+                  ),
+                if (widget.sublabel != null)
+                  Text(
+                    widget.sublabel!,
+                    style: TextStyle(fontSize: 11, color: c.textSubtle),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+
+          // IP value
+          Expanded(
+            child: widget.loading
+                ? Row(children: [
+                    SizedBox(
+                      width: 12, height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.5, color: c.textSubtle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('Memuat…',
+                        style: TextStyle(fontSize: 12, color: c.textSubtle)),
+                  ])
+                : Text(
+                    widget.value,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w500,
+                      color: widget.isError ? c.danger : c.text,
+                    ),
+                  ),
+          ),
+
+          // Action buttons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canCopy)
+                _IconBtn(
+                  c: c,
+                  icon: _copied ? Icons.check : Icons.copy_outlined,
+                  tooltip: _copied ? 'Tersalin' : 'Salin',
+                  color: _copied ? c.success : null,
+                  onTap: _copy,
+                ),
+              if (widget.onRefresh != null)
+                _IconBtn(
+                  c: c,
+                  icon: Icons.refresh,
+                  tooltip: 'Muat ulang',
+                  onTap: widget.onRefresh!,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IconBtn extends StatefulWidget {
+  final AppColors c;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _IconBtn({
+    required this.c,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  State<_IconBtn> createState() => _IconBtnState();
+}
+
+class _IconBtnState extends State<_IconBtn> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit:  (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            width: 28,
+            height: 28,
+            margin: const EdgeInsets.only(left: 4),
+            decoration: BoxDecoration(
+              color: _hover ? c.bgMuted : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 14,
+              color: widget.color ?? (_hover ? c.text : c.textSubtle),
+            ),
+          ),
+        ),
       ),
     );
   }

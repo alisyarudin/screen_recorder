@@ -8,6 +8,7 @@ import '../blocs/recording/recording_bloc.dart';
 import '../blocs/file_list/file_list_cubit.dart';
 import '../blocs/monitoring/monitoring_cubit.dart';
 import '../../data/models/recording_entry.dart';
+import '../widgets/app_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -84,25 +85,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showErrorDialog(BuildContext context, String message) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Rekaman Gagal'),
-        content: Text(message, style: const TextStyle(fontSize: 13, height: 1.5)),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              context.read<RecordingBloc>().add(StartRecording());
-            },
-            child: const Text('Coba Lagi'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Tutup'),
-          ),
-        ],
-      ),
+    showRecordingErrorDialog(
+      context,
+      message,
+      () => context.read<RecordingBloc>().add(StartRecording()),
     );
   }
 }
@@ -232,18 +218,20 @@ class _ActiveRecordingPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: c.bg,
-        border: Border(
-          left: BorderSide(color: c.danger, width: 3),
-          top: BorderSide(color: c.border),
-          right: BorderSide(color: c.border),
-          bottom: BorderSide(color: c.border),
-        ),
+        border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+      clipBehavior: Clip.hardEdge,
+      child: IntrinsicHeight(
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Container(width: 3, color: c.danger),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+                child: Row(
+                  children: [
             // Left: pulsing icon
             _PulsingRecIcon(c: c),
             const SizedBox(width: 14),
@@ -319,6 +307,10 @@ class _ActiveRecordingPanel extends StatelessWidget {
                   onTap: () => context.read<RecordingBloc>().add(StopRecording()),
                 ),
               ],
+            ),
+          ],
+                ),
+              ),
             ),
           ],
         ),
@@ -926,56 +918,18 @@ class _FileRowState extends State<_FileRow> {
     if (await canLaunchUrl(uri)) launchUrl(uri);
   }
 
-  void _rename(BuildContext context, RecordingEntry entry) {
-    final ctrl = TextEditingController(text: entry.name);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ganti Nama'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nama file'),
-          onSubmitted: (_) => _doRename(ctx, entry, ctrl.text),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () => _doRename(ctx, entry, ctrl.text),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _rename(BuildContext context, RecordingEntry entry) async {
+    final newName = await showRenameDialog(context, entry.name);
+    if (newName != null && newName.trim().isNotEmpty) {
+      context.read<FileListCubit>().rename(entry, newName);
+    }
   }
 
-  void _doRename(BuildContext context, RecordingEntry entry, String newName) {
-    final name = newName.trim();
-    if (name.isEmpty) return;
-    final finalName = name.endsWith('.mp4') ? name : '$name.mp4';
-    context.read<FileListCubit>().rename(entry, finalName);
-    Navigator.pop(context);
-  }
-
-  void _confirmDelete(BuildContext context, RecordingEntry entry) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Rekaman?'),
-        content: Text('File "${entry.name}" akan dihapus secara permanen.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          TextButton(
-            onPressed: () {
-              context.read<FileListCubit>().delete(entry);
-              Navigator.pop(ctx);
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _confirmDelete(BuildContext context, RecordingEntry entry) async {
+    final confirmed = await showDeleteDialog(context, entry);
+    if (confirmed) {
+      context.read<FileListCubit>().delete(entry);
+    }
   }
 }
 

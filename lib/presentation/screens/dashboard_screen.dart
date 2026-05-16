@@ -7,6 +7,7 @@ import '../../core/di.dart';
 import '../../data/models/activity_entry.dart';
 import '../blocs/monitoring/monitoring_cubit.dart';
 import '../blocs/recording/recording_bloc.dart';
+import '../widgets/app_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -214,66 +215,13 @@ class _MonitorToggleButtonState extends State<_MonitorToggleButton> {
     if (verified) context.read<MonitoringCubit>().stopMonitoring();
   }
 
-  Future<bool> _showPasswordDialog() async {
-    final ctrl = TextEditingController();
-    String? errorText;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Stop Monitoring'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Masukkan password admin untuk menghentikan monitoring.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                obscureText: true,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Password Admin',
-                  errorText: errorText,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onSubmitted: (_) async {
-                  final ok = await DI.adminService.verifyAdminPassword(ctrl.text);
-                  if (ok) {
-                    Navigator.of(ctx).pop(true);
-                  } else {
-                    setLocal(() => errorText = 'Password salah');
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final ok = await DI.adminService.verifyAdminPassword(ctrl.text);
-                if (ok) {
-                  Navigator.of(ctx).pop(true);
-                } else {
-                  setLocal(() => errorText = 'Password salah');
-                }
-              },
-              child: const Text('Konfirmasi'),
-            ),
-          ],
-        ),
-      ),
+  Future<bool> _showPasswordDialog() {
+    return showPasswordDialog(
+      context,
+      title: 'Password diperlukan',
+      subtitle: 'Masukkan password admin untuk menghentikan monitoring.',
+      confirmLabel: 'Stop Monitoring',
     );
-
-    ctrl.dispose();
-    return confirmed ?? false;
   }
 
   @override
@@ -1130,37 +1078,7 @@ class _ScreenshotTile extends StatelessWidget {
   }
 
   void _openFullscreen(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${entry.appName.isEmpty ? '' : '${entry.appName}  ·  '}${entry.timestamp.toString().substring(0, 19)}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            Image.file(File(entry.path), fit: BoxFit.contain),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
+    showScreenshotFullscreen(context, entry);
   }
 }
 

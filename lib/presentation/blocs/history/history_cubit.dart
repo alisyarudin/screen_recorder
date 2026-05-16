@@ -18,10 +18,10 @@ class HistoryState {
 class HistoryCubit extends Cubit<HistoryState> {
   HistoryCubit() : super(const HistoryState(days: []));
 
-  void load() {
+  void load({int days = 90}) {
     emit(state.copyWith(isLoading: true));
-    final days = DI.historyService.getRecentDays(35);
-    emit(HistoryState(days: days, isLoading: false));
+    final loaded = DI.historyService.getRecentDays(days);
+    emit(HistoryState(days: loaded, isLoading: false));
   }
 
   void reload() => load();

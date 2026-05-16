@@ -22,10 +22,9 @@ class MonitoringCubit extends Cubit<MonitoringState> {
     final settings = DI.settingsService.load();
     final outputDir =
         settings.outputDir.isEmpty ? _defaultOutputDir() : settings.outputDir;
-    final screenshotDir = '$outputDir${Platform.pathSeparator}Screenshots';
 
     await DI.activityMonitorService.startMonitoring(
-      screenshotDir: screenshotDir,
+      outputBaseDir: outputDir,
       screenshotIntervalSeconds: state.screenshotInterval,
     );
 
@@ -101,9 +100,8 @@ class MonitoringCubit extends Cubit<MonitoringState> {
     final settings = DI.settingsService.load();
     final outputDir =
         settings.outputDir.isEmpty ? _defaultOutputDir() : settings.outputDir;
-    final screenshotDir = '$outputDir${Platform.pathSeparator}Screenshots';
 
-    DI.activityMonitorService.setScreenshotInterval(seconds, screenshotDir);
+    DI.activityMonitorService.setScreenshotInterval(seconds, outputDir);
     emit(state.copyWith(screenshotInterval: seconds));
   }
 
@@ -171,7 +169,7 @@ class MonitoringCubit extends Cubit<MonitoringState> {
         ? (Platform.environment['USERPROFILE'] ??
             '${Platform.environment['HOMEDRIVE']}${Platform.environment['HOMEPATH']}')
         : (Platform.environment['HOME'] ?? '/tmp');
-    return '$home${sep}ScreenRecordings';
+    return '$home${sep}Jasnita Screen Recorder';
   }
 
   @override

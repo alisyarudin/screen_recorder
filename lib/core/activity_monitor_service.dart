@@ -20,6 +20,7 @@ class ActivityMonitorService {
 
   bool _wasIdle = false;
   int _idleThresholdSeconds = 60;
+  String? _outputBaseDir;
 
   ActivityMonitorService() {
     if (Platform.isMacOS) {
@@ -34,11 +35,12 @@ class ActivityMonitorService {
   }
 
   Future<void> startMonitoring({
-    required String screenshotDir,
+    required String outputBaseDir,
     int idleThresholdSeconds = 60,
     int screenshotIntervalSeconds = 60,
   }) async {
     _idleThresholdSeconds = idleThresholdSeconds;
+    _outputBaseDir = outputBaseDir;
 
     if (Platform.isMacOS) {
       await _channel.invokeMethod('startActivityMonitoring');
@@ -63,29 +65,39 @@ class ActivityMonitorService {
     });
 
     // Screenshot timer
-    _startScreenshotTimer(screenshotDir, screenshotIntervalSeconds);
+    _startScreenshotTimer(screenshotIntervalSeconds);
   }
 
-  void setScreenshotInterval(int seconds, String screenshotDir) {
+  void setScreenshotInterval(int seconds, String outputBaseDir) {
+    _outputBaseDir = outputBaseDir;
     _screenshotTimer?.cancel();
     _screenshotTimer = null;
-    _startScreenshotTimer(screenshotDir, seconds);
+    _startScreenshotTimer(seconds);
   }
 
-  void _startScreenshotTimer(String dir, int seconds) {
+  void _startScreenshotTimer(int seconds) {
     if (seconds <= 0 || !Platform.isMacOS) return;
     _screenshotTimer = Timer.periodic(Duration(seconds: seconds), (_) async {
-      await _captureScreenshot(dir);
+      await _captureScreenshot();
     });
   }
 
-  Future<void> _captureScreenshot(String outputDir) async {
+  Future<void> _captureScreenshot() async {
+    final base = _outputBaseDir;
+    if (base == null) return;
     try {
-      final d = Directory(outputDir);
+      final now = DateTime.now();
+      final year  = now.year.toString();
+      final month = now.month.toString().padLeft(2, '0');
+      final day   = now.day.toString().padLeft(2, '0');
+      final sep   = Platform.pathSeparator;
+      final dailyDir = '$base$sep$year$sep$month$sep$day';
+
+      final d = Directory(dailyDir);
       if (!await d.exists()) await d.create(recursive: true);
 
-      final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final path = '$outputDir${Platform.pathSeparator}SCR_$ts.jpg';
+      final ts   = DateFormat('yyyyMMdd_HHmmss').format(now);
+      final path = '$dailyDir${sep}SCR_$ts.jpg';
 
       final ok =
           await _channel.invokeMethod<bool>('takeScreenshot', {'outputPath': path}) ??

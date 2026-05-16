@@ -1,59 +1,164 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import '../../core/app_colors.dart';
+import '../../core/di.dart';
 import '../../data/models/history_entry.dart';
 import '../blocs/history/history_cubit.dart';
 
 // ─── App colour palette ───────────────────────────────────────────────────────
 
 const _kAppColors = {
-  'Google Chrome': Color(0xFF4285F4),
-  'Microsoft Teams': Color(0xFF6264A7),
-  'Visual Studio Code': Color(0xFF0078D4),
-  'Slack': Color(0xFF611F69),
-  'Notepad': Color(0xFFFFB900),
-  'Microsoft Outlook': Color(0xFF0078D4),
+  'Google Chrome':       Color(0xFF4285F4),
+  'Microsoft Teams':     Color(0xFF6264A7),
+  'Visual Studio Code':  Color(0xFF0078D4),
+  'Slack':               Color(0xFF611F69),
+  'Notepad':             Color(0xFFFFB900),
+  'Microsoft Outlook':   Color(0xFF0078D4),
+  'Spotify':             Color(0xFF1DB954),
+  'Figma':               Color(0xFFA259FF),
+  'Postman':             Color(0xFFFF6C37),
 };
 
-Color _colorFor(String appName) => _kAppColors[appName] ?? Colors.grey;
-String _initialFor(String appName) =>
-    appName.isNotEmpty ? appName[0].toUpperCase() : '?';
+Color _colorFor(String n) => _kAppColors[n] ?? const Color(0xFF8B8B9E);
+String _initialFor(String n) => n.isNotEmpty ? n[0].toUpperCase() : '?';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Format helpers ───────────────────────────────────────────────────────────
 
-String _fmtHM(Duration d) {
-  final h = d.inHours;
-  final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-  return '${h}j ${m}m';
-}
-
-String _fmtHMS(Duration d) {
+String _fmtHHMM(Duration d) {
   final h = d.inHours.toString().padLeft(2, '0');
   final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  return '$h:$m:$s';
+  return '$h:$m';
 }
 
-String _fmtTime(DateTime dt) =>
-    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+String _fmtIdleShort(Duration d) {
+  final h = d.inHours;
+  final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  return '$h:$m';
+}
 
-String _dayLabel(DateTime date, DateTime today) {
-  final d = DateTime(date.year, date.month, date.day);
-  final t = DateTime(today.year, today.month, today.day);
+const _kDayNames  = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+const _kMonthFull = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+const _kMonthShort = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+];
+
+String _dayLabel(DateTime date) {
+  final now = DateTime.now();
+  final d   = DateTime(date.year, date.month, date.day);
+  final t   = DateTime(now.year,  now.month,  now.day);
   final diff = t.difference(d).inDays;
   if (diff == 0) return 'Hari ini';
   if (diff == 1) return 'Kemarin';
-  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-  return days[date.weekday - 1];
+  return '${_kDayNames[date.weekday - 1]}, ${date.day} ${_kMonthShort[date.month - 1]}';
 }
 
-String _fullDateLabel(DateTime date) {
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
-  ];
-  return '${date.day} ${months[date.month - 1]} ${date.year}';
+String _fullDateLabel(DateTime d) =>
+    '${d.day} ${_kMonthFull[d.month - 1]} ${d.year}';
+
+bool _isToday(DateTime d) {
+  final n = DateTime.now();
+  return d.year == n.year && d.month == n.month && d.day == n.day;
+}
+
+// ─── File / folder helpers ────────────────────────────────────────────────────
+
+String _defaultOutputDir() {
+  final sep  = Platform.isWindows ? '\\' : '/';
+  final home = Platform.isWindows
+      ? (Platform.environment['USERPROFILE'] ??
+          '${Platform.environment['HOMEDRIVE']}${Platform.environment['HOMEPATH']}')
+      : (Platform.environment['HOME'] ?? '/tmp');
+  return '$home${sep}Jasnita Screen Recorder';
+}
+
+String _baseDir() {
+  final s = DI.settingsService.load();
+  return s.outputDir.isEmpty ? _defaultOutputDir() : s.outputDir;
+}
+
+String _dailyDirFor(DateTime d) {
+  final sep   = Platform.pathSeparator;
+  final year  = d.year.toString();
+  final month = d.month.toString().padLeft(2, '0');
+  final day   = d.day.toString().padLeft(2, '0');
+  return '${_baseDir()}$sep$year$sep$month$sep$day';
+}
+
+// ─── Action helpers ───────────────────────────────────────────────────────────
+
+void _showRecordingsDialog(BuildContext context, AppColors c, HistoryDay day) {
+  showDialog(context: context, builder: (_) => _RecordingsDialog(c: c, day: day));
+}
+
+void _showScreenshotsDialog(BuildContext context, AppColors c, HistoryDay day) {
+  showDialog(context: context, builder: (_) => _ScreenshotsDialog(c: c, day: day));
+}
+
+Future<void> _exportDayCsv(BuildContext context, HistoryDay day) async {
+  final base  = _baseDir();
+  final ts    = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+  final fpath = '$base${Platform.pathSeparator}riwayat_${day.dateKey}_$ts.csv';
+  final csv   = StringBuffer(
+      'Tanggal,Aktif (menit),Idle (menit),Screenshot,Rekaman,Aplikasi\n');
+  csv.write('"${_fullDateLabel(day.date)}",${day.totalActive.inMinutes}'
+      ',${day.totalIdle.inMinutes},${day.totalScreenshots}'
+      ',${day.totalRecordings},"${day.topApps.map((a) => a.appName).join('; ')}"\n');
+  try {
+    await Directory(base).create(recursive: true);
+    await File(fpath).writeAsString(csv.toString());
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Disimpan: riwayat_${day.dateKey}_$ts.csv'),
+        action: SnackBarAction(
+            label: 'Buka Folder',
+            onPressed: () => Process.run('open', [base])),
+      ));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal ekspor: $e')));
+    }
+  }
+}
+
+Future<void> _openDayFolder(BuildContext context, HistoryDay day) async {
+  final dir = _dailyDirFor(day.date);
+  final target = await Directory(dir).exists() ? dir : _baseDir();
+  await Process.run('open', [target]);
+}
+
+Future<void> _deleteDayData(
+    BuildContext context, AppColors c, HistoryDay day) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: c.bg,
+      title: Text('Hapus data ${_dayLabel(day.date)}?',
+          style: TextStyle(color: c.text, fontSize: 14)),
+      content: Text(
+          'Data riwayat ${_fullDateLabel(day.date)} akan dihapus permanen.',
+          style: TextStyle(color: c.textMuted, fontSize: 13)),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Batal', style: TextStyle(color: c.textMuted))),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Hapus', style: TextStyle(color: c.danger))),
+      ],
+    ),
+  );
+  if (confirmed == true && context.mounted) {
+    await DI.historyService.deleteDay(day.dateKey);
+    if (context.mounted) context.read<HistoryCubit>().reload();
+  }
 }
 
 // ─── History Screen ───────────────────────────────────────────────────────────
@@ -66,12 +171,74 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  String _range = 'bulan';
+  late DateTime _fromDate;
+  late DateTime _toDate;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _toDate   = DateTime(now.year, now.month, now.day);
+    _fromDate = _toDate.subtract(const Duration(days: 15));
     context.read<HistoryCubit>().load();
+  }
+
+  List<HistoryDay> _filtered(List<HistoryDay> all) {
+    return all.where((d) {
+      final date = DateTime(d.date.year, d.date.month, d.date.day);
+      return !date.isBefore(_fromDate) && !date.isAfter(_toDate);
+    }).toList();
+  }
+
+  Future<void> _pickDate(bool isFrom) async {
+    final now    = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isFrom ? _fromDate : _toDate,
+      firstDate: DateTime(2020),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _fromDate = picked;
+        if (_toDate.isBefore(picked)) _toDate = picked;
+      } else {
+        _toDate = picked;
+        if (_fromDate.isAfter(picked)) _fromDate = picked;
+      }
+    });
+  }
+
+  Future<void> _exportAllCsv(List<HistoryDay> days) async {
+    if (days.isEmpty) return;
+    final base  = _baseDir();
+    final ts    = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final fpath = '$base${Platform.pathSeparator}riwayat_$ts.csv';
+    final csv   = StringBuffer(
+        'Tanggal,Aktif (menit),Idle (menit),Screenshot,Rekaman,Aplikasi\n');
+    for (final d in days) {
+      csv.write('"${_fullDateLabel(d.date)}",${d.totalActive.inMinutes}'
+          ',${d.totalIdle.inMinutes},${d.totalScreenshots}'
+          ',${d.totalRecordings},"${d.topApps.map((a) => a.appName).join('; ')}"\n');
+    }
+    try {
+      await Directory(base).create(recursive: true);
+      await File(fpath).writeAsString(csv.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Disimpan: riwayat_$ts.csv'),
+          action: SnackBarAction(
+              label: 'Buka Folder',
+              onPressed: () => Process.run('open', [base])),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Gagal ekspor: $e')));
+      }
+    }
   }
 
   @override
@@ -79,14 +246,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final c = AppColors.of(context);
     return BlocBuilder<HistoryCubit, HistoryState>(
       builder: (context, state) {
+        final filtered = _filtered(state.days);
         return Column(
           children: [
-            _PageHeader(c: c, range: _range, onRangeChange: (v) => setState(() => _range = v)),
+            _PageHeader(
+              c: c,
+              fromDate: _fromDate,
+              toDate: _toDate,
+              onPickFrom: () => _pickDate(true),
+              onPickTo: () => _pickDate(false),
+              onExportCsv: () => _exportAllCsv(filtered),
+            ),
             Divider(height: 1, thickness: 1, color: c.borderSoft),
             Expanded(
               child: state.isLoading
                   ? Center(child: CircularProgressIndicator(color: c.accent))
-                  : _HistoryBody(c: c, days: state.days),
+                  : _HistoryBody(c: c, days: filtered),
             ),
           ],
         );
@@ -99,10 +274,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
 class _PageHeader extends StatelessWidget {
   final AppColors c;
-  final String range;
-  final ValueChanged<String> onRangeChange;
+  final DateTime fromDate;
+  final DateTime toDate;
+  final VoidCallback onPickFrom;
+  final VoidCallback onPickTo;
+  final VoidCallback onExportCsv;
 
-  const _PageHeader({required this.c, required this.range, required this.onRangeChange});
+  const _PageHeader({
+    required this.c,
+    required this.fromDate,
+    required this.toDate,
+    required this.onPickFrom,
+    required this.onPickTo,
+    required this.onExportCsv,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -110,44 +295,43 @@ class _PageHeader extends StatelessWidget {
       color: c.bg,
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Riwayat',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: c.text,
-                  letterSpacing: -0.15,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Riwayat',
+                  style: TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w600,
+                    color: c.text, letterSpacing: -0.15,
+                  ),
                 ),
-              ),
-              Text(
-                'Data aktivitas tersimpan per hari · klik baris hari untuk lihat detail',
-                style: TextStyle(fontSize: 12, color: c.textMuted),
-              ),
-            ],
+                const SizedBox(height: 1),
+                Text(
+                  'Data aktivitas tersimpan per hari · klik baris hari untuk lihat detail',
+                  style: TextStyle(fontSize: 12, color: c.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
-          _SegmentedControl(
+          const SizedBox(width: 16),
+          _DateRangePicker(
             c: c,
-            options: const [('bulan', 'Bulan ini'), ('triwulan', 'Triwulan'), ('tahun', 'Tahun')],
-            selected: range,
-            onSelect: onRangeChange,
+            fromDate: fromDate,
+            toDate: toDate,
+            onPickFrom: onPickFrom,
+            onPickTo: onPickTo,
           ),
-          const SizedBox(width: 10),
-          OutlinedButton.icon(
-            onPressed: () {},
-            icon: Icon(Icons.download_outlined, size: 14, color: c.textMuted),
-            label: Text('Ekspor CSV', style: TextStyle(fontSize: 12, color: c.textMuted)),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: c.border),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+          const SizedBox(width: 8),
+          _SmallOutlineBtn(
+            c: c,
+            icon: Icons.download_outlined,
+            label: 'Ekspor CSV',
+            onTap: onExportCsv,
           ),
         ],
       ),
@@ -155,386 +339,63 @@ class _PageHeader extends StatelessWidget {
   }
 }
 
-// ─── Segmented control ────────────────────────────────────────────────────────
+// ─── Date Range Picker ────────────────────────────────────────────────────────
 
-class _SegmentedControl extends StatelessWidget {
+class _DateRangePicker extends StatelessWidget {
   final AppColors c;
-  final List<(String, String)> options;
-  final String selected;
-  final ValueChanged<String> onSelect;
+  final DateTime fromDate;
+  final DateTime toDate;
+  final VoidCallback onPickFrom;
+  final VoidCallback onPickTo;
 
-  const _SegmentedControl({
+  const _DateRangePicker({
     required this.c,
-    required this.options,
-    required this.selected,
-    required this.onSelect,
+    required this.fromDate,
+    required this.toDate,
+    required this.onPickFrom,
+    required this.onPickTo,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: c.bgMuted,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: c.borderSoft),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: options.map((opt) {
-          final active = opt.$1 == selected;
-          return GestureDetector(
-            onTap: () => onSelect(opt.$1),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: active ? c.bg : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-                boxShadow: active
-                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)]
-                    : null,
-              ),
-              child: Text(
-                opt.$2,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                  color: active ? c.text : c.textMuted,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-// ─── Body ─────────────────────────────────────────────────────────────────────
-
-class _HistoryBody extends StatelessWidget {
-  final AppColors c;
-  final List<HistoryDay> days;
-
-  const _HistoryBody({required this.c, required this.days});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        _CalendarHeatmap(c: c, days: days),
-        const SizedBox(height: 16),
-        _SummaryTiles(c: c, days: days),
-        const SizedBox(height: 20),
-        _SectionLabel(c: c, label: 'Per hari'),
-        const SizedBox(height: 8),
-        _DayList(c: c, days: days),
-        const SizedBox(height: 16),
-        _InfoBanner(c: c),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-}
-
-// ─── Section label ────────────────────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  final AppColors c;
-  final String label;
-
-  const _SectionLabel({required this.c, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.07,
-        color: c.textSubtle,
-      ),
-    );
-  }
-}
-
-// ─── Calendar Heatmap ─────────────────────────────────────────────────────────
-
-class _CalendarHeatmap extends StatelessWidget {
-  final AppColors c;
-  final List<HistoryDay> days; // index 0 = today, up to 35
-
-  const _CalendarHeatmap({required this.c, required this.days});
-
-  Color _cellColor(double intensity) {
-    if (intensity <= 0) return c.bgMuted;
-    if (intensity < 0.25) return c.accent.withValues(alpha: 0.18);
-    if (intensity < 0.50) return c.accent.withValues(alpha: 0.38);
-    if (intensity < 0.75) return c.accent.withValues(alpha: 0.62);
-    return c.accent;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final today = DateTime.now();
-
-    // Build a 5×7 grid (col=week, row=weekday Mon-Sun).
-    // days[0] = today. We need to place each day into the right cell.
-    // Determine the starting Monday of the grid (5 weeks back from today's week).
-    final todayWeekday = today.weekday; // 1=Mon, 7=Sun
-    final thisMonday = today.subtract(Duration(days: todayWeekday - 1));
-    final gridStart = thisMonday.subtract(const Duration(days: 28)); // 4 weeks back = 5 weeks total
-
-    // Map dateKey → intensity
-    final intensityMap = <String, double>{};
-    for (final day in days) {
-      intensityMap[day.dateKey] = day.activityIntensity;
-    }
-
-    String dateKey(DateTime d) =>
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final days      = toDate.difference(fromDate).inDays + 1;
+    final fromLabel = '${fromDate.day} ${_kMonthShort[fromDate.month - 1]} ${fromDate.year}';
+    final toLabel   = '${toDate.day} ${_kMonthShort[toDate.month - 1]} ${toDate.year}';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      height: 30,
       decoration: BoxDecoration(
-        color: c.bgSubtle,
+        color: c.bg,
         border: Border.all(color: c.border),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(7),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row
-          Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Aktivitas 5 minggu terakhir',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: c.text,
-                    ),
-                  ),
-                  Text(
-                    'Intensitas penggunaan harian',
-                    style: TextStyle(fontSize: 11, color: c.textMuted),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              // Legend
-              Row(
-                children: [
-                  Text('Sedikit', style: TextStyle(fontSize: 10, color: c.textSubtle)),
-                  const SizedBox(width: 4),
-                  ...([0.0, 0.15, 0.35, 0.60, 1.0]).map((v) => Container(
-                        width: 14,
-                        height: 14,
-                        margin: const EdgeInsets.only(left: 2),
-                        decoration: BoxDecoration(
-                          color: _cellColor(v),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      )),
-                  const SizedBox(width: 4),
-                  Text('Banyak', style: TextStyle(fontSize: 10, color: c.textSubtle)),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Day-of-week labels + grid
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Row labels
-              Column(
-                children: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((lbl) {
-                  return SizedBox(
-                    height: 22,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Text(
-                          lbl,
-                          style: TextStyle(fontSize: 9, color: c.textSubtle),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-
-              // 5-column × 7-row grid
-              Expanded(
-                child: Row(
-                  children: List.generate(5, (col) {
-                    return Expanded(
-                      child: Column(
-                        children: List.generate(7, (row) {
-                          final cellDate = gridStart.add(Duration(days: col * 7 + row));
-                          final key = dateKey(cellDate);
-                          final intensity = intensityMap[key] ?? 0.0;
-                          final isToday = key == dateKey(today);
-                          final isFuture = cellDate.isAfter(today);
-
-                          return Container(
-                            height: 22,
-                            margin: const EdgeInsets.all(1.5),
-                            decoration: BoxDecoration(
-                              color: isFuture ? c.bgMuted.withValues(alpha: 0.4) : _cellColor(intensity),
-                              borderRadius: BorderRadius.circular(4),
-                              border: isToday
-                                  ? Border.all(color: c.accent, width: 1.5)
-                                  : null,
-                            ),
-                          );
-                        }),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Summary Tiles ────────────────────────────────────────────────────────────
-
-class _SummaryTiles extends StatelessWidget {
-  final AppColors c;
-  final List<HistoryDay> days;
-
-  const _SummaryTiles({required this.c, required this.days});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final thisMonth = days.where((d) => d.date.month == now.month && d.date.year == now.year);
-
-    // Total hours this month
-    final totalActive = thisMonth.fold(Duration.zero, (s, d) => s + d.totalActive);
-
-    // Longest day this month
-    Duration longestDay = Duration.zero;
-    for (final d in thisMonth) {
-      if (d.totalActive > longestDay) longestDay = d.totalActive;
-    }
-
-    // Avg active % (of days with sessions)
-    final daysWithData = thisMonth.where((d) => d.sessions.isNotEmpty).toList();
-    double avgPct = 0;
-    if (daysWithData.isNotEmpty) {
-      final totalSession = daysWithData.fold(Duration.zero, (s, d) {
-        return s + d.sessions.fold(Duration.zero, (ss, se) => ss + se.totalDuration);
-      });
-      final totalAct = daysWithData.fold(Duration.zero, (s, d) => s + d.totalActive);
-      avgPct = totalSession.inSeconds > 0
-          ? (totalAct.inSeconds / totalSession.inSeconds * 100).clamp(0, 100)
-          : 0;
-    }
-
-    // Total recordings
-    final totalRec = thisMonth.fold(0, (s, d) => s + d.totalRecordings);
-
-    return Row(
-      children: [
-        _StatTile(
-          c: c,
-          label: 'Total bulan ini',
-          value: _fmtHM(totalActive),
-          sublabel: 'waktu aktif',
-        ),
-        const SizedBox(width: 10),
-        _StatTile(
-          c: c,
-          label: 'Hari terpanjang',
-          value: _fmtHM(longestDay),
-          sublabel: 'waktu aktif terlama',
-        ),
-        const SizedBox(width: 10),
-        _StatTile(
-          c: c,
-          label: 'Rata-rata aktif',
-          value: '${avgPct.toStringAsFixed(0)}%',
-          sublabel: 'dari total sesi',
-          accent: c.success,
-        ),
-        const SizedBox(width: 10),
-        _StatTile(
-          c: c,
-          label: 'Total rekaman',
-          value: '$totalRec',
-          sublabel: 'file rekaman',
-        ),
-      ],
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  final AppColors c;
-  final String label;
-  final String value;
-  final String sublabel;
-  final Color? accent;
-
-  const _StatTile({
-    required this.c,
-    required this.label,
-    required this.value,
-    required this.sublabel,
-    this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: c.bgSubtle,
-          border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.hardEdge,
+      child: IntrinsicHeight(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.06,
-                color: c.textSubtle,
+            _DateField(c: c, label: 'DARI',   value: fromLabel, onTap: onPickFrom),
+            VerticalDivider(width: 1, thickness: 1, color: c.borderSoft),
+            _DateField(c: c, label: 'SAMPAI', value: toLabel,   onTap: onPickTo),
+            VerticalDivider(width: 1, thickness: 1, color: c.borderSoft),
+            Container(
+              color: c.bgSubtle,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$days hari',
+                    style: TextStyle(
+                      fontSize: 11.5, fontWeight: FontWeight.w500,
+                      color: c.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: c.textMuted),
+                ],
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 22,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
-                color: accent ?? c.text,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            Text(
-              sublabel,
-              style: TextStyle(fontSize: 11, color: c.textSubtle),
             ),
           ],
         ),
@@ -543,45 +404,201 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-// ─── Day List ─────────────────────────────────────────────────────────────────
-
-class _DayList extends StatefulWidget {
+class _DateField extends StatefulWidget {
   final AppColors c;
-  final List<HistoryDay> days;
-
-  const _DayList({required this.c, required this.days});
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+  const _DateField({required this.c, required this.label, required this.value, required this.onTap});
 
   @override
-  State<_DayList> createState() => _DayListState();
+  State<_DateField> createState() => _DateFieldState();
 }
 
-class _DayListState extends State<_DayList> {
-  int _expandedIdx = -1;
+class _DateFieldState extends State<_DateField> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    final days = widget.days;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          color: _hover ? c.bgHover : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 10, color: c.textSubtle,
+                  letterSpacing: 0.06, fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                widget.value,
+                style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w500, color: c.text,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
+// ─── History Body ─────────────────────────────────────────────────────────────
+
+class _HistoryBody extends StatelessWidget {
+  final AppColors c;
+  final List<HistoryDay> days;
+  const _HistoryBody({required this.c, required this.days});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      children: [
+        if (days.isEmpty)
+          _EmptyState(c: c)
+        else
+          _DayListCard(c: c, days: days),
+        const SizedBox(height: 14),
+        _InfoBanner(c: c),
+      ],
+    );
+  }
+}
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final AppColors c;
+  const _EmptyState({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.symmetric(vertical: 48),
       decoration: BoxDecoration(
         color: c.bgSubtle,
         border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(10),
       ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.history_rounded, size: 32, color: c.textFaint),
+          const SizedBox(height: 10),
+          Text(
+            'Belum ada riwayat aktivitas',
+            style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w500, color: c.textSubtle,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Mulai monitoring untuk merekam aktivitas harian',
+            style: TextStyle(fontSize: 12, color: c.textFaint),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Day List Card ────────────────────────────────────────────────────────────
+
+class _DayListCard extends StatefulWidget {
+  final AppColors c;
+  final List<HistoryDay> days;
+  const _DayListCard({required this.c, required this.days});
+
+  @override
+  State<_DayListCard> createState() => _DayListCardState();
+}
+
+class _DayListCardState extends State<_DayListCard> {
+  int  _expandedIdx = 0; // today expanded by default
+  bool _showAll     = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c      = widget.c;
+    final days   = widget.days;
+    final count  = _showAll ? days.length : days.length.clamp(0, 14);
+    final visible = days.take(count).toList();
+    final hasMore = days.length > 14 && !_showAll;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bg,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        children: List.generate(days.length, (i) {
-          return _DayCard(
+        children: [
+          ...List.generate(visible.length, (i) => _DayCard(
             c: c,
-            day: days[i],
+            day: visible[i],
             expanded: _expandedIdx == i,
-            onToggle: days[i].sessions.isEmpty
-                ? null
-                : () => setState(() => _expandedIdx = _expandedIdx == i ? -1 : i),
-            isLast: i == days.length - 1,
-          );
-        }),
+            onToggle: visible[i].sessions.isNotEmpty
+                ? () => setState(() => _expandedIdx = _expandedIdx == i ? -1 : i)
+                : null,
+            showTopBorder: i > 0,
+          )),
+          if (hasMore) _ShowMoreRow(c: c, onTap: () => setState(() => _showAll = true)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShowMoreRow extends StatefulWidget {
+  final AppColors c;
+  final VoidCallback onTap;
+  const _ShowMoreRow({required this.c, required this.onTap});
+
+  @override
+  State<_ShowMoreRow> createState() => _ShowMoreRowState();
+}
+
+class _ShowMoreRowState extends State<_ShowMoreRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: _hover ? c.bgHover : c.bgSubtle,
+            border: Border(top: BorderSide(color: c.borderSoft)),
+          ),
+          child: Center(
+            child: Text(
+              'Tampilkan riwayat lebih lama',
+              style: TextStyle(fontSize: 12, color: c.textMuted),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -594,14 +611,14 @@ class _DayCard extends StatefulWidget {
   final HistoryDay day;
   final bool expanded;
   final VoidCallback? onToggle;
-  final bool isLast;
+  final bool showTopBorder;
 
   const _DayCard({
     required this.c,
     required this.day,
     required this.expanded,
     required this.onToggle,
-    required this.isLast,
+    required this.showTopBorder,
   });
 
   @override
@@ -613,123 +630,104 @@ class _DayCardState extends State<_DayCard> {
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.c;
-    final day = widget.day;
-    final today = DateTime.now();
+    final c       = widget.c;
+    final day     = widget.day;
     final hasData = day.sessions.isNotEmpty;
+    final today   = _isToday(day.date);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Collapsed row
+        // Top separator
+        if (widget.showTopBorder)
+          Divider(height: 1, thickness: 1, color: c.borderSoft),
+
+        // Row
         MouseRegion(
           cursor: hasData ? SystemMouseCursors.click : SystemMouseCursors.basic,
-          onEnter: hasData ? (_) => setState(() => _hovered = true) : null,
-          onExit: hasData ? (_) => setState(() => _hovered = false) : null,
+          onEnter: hasData ? (_) => setState(() => _hovered = true)  : null,
+          onExit:  hasData ? (_) => setState(() => _hovered = false) : null,
           child: GestureDetector(
             onTap: widget.onToggle,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 100),
               color: _hovered && hasData
                   ? c.bgHover
-                  : widget.expanded
-                      ? c.bgActive
-                      : Colors.transparent,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  : widget.expanded ? c.bgSubtle : Colors.transparent,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
               child: Row(
                 children: [
-                  // Col 1: date info (130px)
+                  // Date (130px)
                   SizedBox(
                     width: 130,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          _dayLabel(day.date, today),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: c.text,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _dayLabel(day.date),
+                                style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600,
+                                  color: hasData ? c.text : c.textSubtle,
+                                ),
+                              ),
+                            ),
+                            if (today) ...[
+                              const SizedBox(width: 6),
+                              _LiveBadge(c: c),
+                            ],
+                          ],
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           _fullDateLabel(day.date),
-                          style: TextStyle(fontSize: 10, color: c.textMuted),
+                          style: TextStyle(fontSize: 11, color: c.textMuted),
                         ),
-                        if (hasData) ...[
-                          Text(
-                            '${day.sessions.length} sesi',
-                            style: TextStyle(fontSize: 10, color: c.textSubtle),
-                          ),
-                          Text(
-                            '${_fmtTime(day.sessions.first.startTime)} – ${_fmtTime(day.sessions.last.endTime)}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: c.textSubtle,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
 
-                  // Col 2: app stack + names
+                  // App stack
                   Expanded(
                     child: hasData
-                        ? _AppStack(c: c, apps: day.topApps.take(5).toList())
+                        ? _AppStack(c: c, apps: day.topApps.take(6).toList())
                         : Text(
-                            'Tidak ada aktivitas',
+                            'Tidak ada aktivitas — monitor tidak dijalankan',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: c.textFaint,
+                              fontSize: 12, color: c.textSubtle,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
                   ),
 
-                  // Col 3: day stats (220px)
-                  if (hasData)
-                    SizedBox(
-                      width: 220,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          _DayStat(
-                            c: c,
-                            value: _fmtHMS(day.totalActive),
-                            label: 'Aktif',
-                            valueColor: c.success,
-                          ),
-                          const SizedBox(width: 16),
-                          _DayStat(
-                            c: c,
-                            value: '${day.totalScreenshots}',
-                            label: 'Shot',
-                          ),
-                          const SizedBox(width: 16),
-                          _DayStat(
-                            c: c,
-                            value: '${day.totalRecordings}',
-                            label: 'Rekam',
-                          ),
-                        ],
-                      ),
+                  // Stats: Aktif | Idle | Shot | Rekam
+                  if (hasData) ...[
+                    const SizedBox(width: 12),
+                    Row(
+                      children: [
+                        _DayStat(c: c, label: 'Aktif', value: _fmtHHMM(day.totalActive),  accent: c.success),
+                        const SizedBox(width: 16),
+                        _DayStat(c: c, label: 'Idle',  value: _fmtIdleShort(day.totalIdle)),
+                        const SizedBox(width: 16),
+                        _DayStat(c: c, label: 'Shot',  value: '${day.totalScreenshots}'),
+                        const SizedBox(width: 16),
+                        _DayStat(c: c, label: 'Rekam', value: '${day.totalRecordings}'),
+                      ],
                     ),
+                  ],
 
-                  // Col 4: chevron (22px)
+                  // Chevron
                   const SizedBox(width: 8),
                   SizedBox(
-                    width: 22,
+                    width: 22, height: 22,
                     child: hasData
                         ? AnimatedRotation(
                             turns: widget.expanded ? 0.25 : 0,
-                            duration: const Duration(milliseconds: 180),
-                            child: Icon(
-                              Icons.chevron_right,
-                              size: 16,
-                              color: c.textSubtle,
-                            ),
+                            duration: const Duration(milliseconds: 150),
+                            child: Icon(Icons.chevron_right, size: 16, color: c.textSubtle),
                           )
                         : const SizedBox.shrink(),
                   ),
@@ -740,11 +738,34 @@ class _DayCardState extends State<_DayCard> {
         ),
 
         // Expanded detail
-        if (widget.expanded) _DayDetail(c: c, day: day),
-
-        // Divider
-        if (!widget.isLast) Divider(height: 1, thickness: 1, color: c.borderSoft),
+        if (widget.expanded && hasData) _DayDetail(c: c, day: day),
       ],
+    );
+  }
+}
+
+// ─── Live Badge ───────────────────────────────────────────────────────────────
+
+class _LiveBadge extends StatelessWidget {
+  final AppColors c;
+  const _LiveBadge({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: c.accent.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        'Live',
+        style: TextStyle(
+          fontSize: 10, fontWeight: FontWeight.w600,
+          color: c.accent, letterSpacing: 0.02,
+        ),
+      ),
     );
   }
 }
@@ -754,76 +775,76 @@ class _DayCardState extends State<_DayCard> {
 class _AppStack extends StatelessWidget {
   final AppColors c;
   final List<AppUsageSummary> apps;
-
   const _AppStack({required this.c, required this.apps});
 
   @override
   Widget build(BuildContext context) {
     if (apps.isEmpty) return const SizedBox.shrink();
-    const avatarSize = 22.0;
+    const size    = 22.0;
     const overlap = 5.0;
 
+    final shown = apps.take(4).toList();
+    final extra = apps.length - shown.length;
+    final totalChips = shown.length + (extra > 0 ? 1 : 0);
+    final stackWidth = totalChips * (size - overlap) + overlap;
+
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Avatar stack
         SizedBox(
-          width: apps.length * (avatarSize - overlap) + overlap,
-          height: avatarSize,
+          width: stackWidth,
+          height: size,
           child: Stack(
-            children: List.generate(apps.length, (i) {
-              final app = apps[i];
-              final color = _colorFor(app.appName);
-              return Positioned(
-                left: i * (avatarSize - overlap),
-                child: Container(
-                  width: avatarSize,
-                  height: avatarSize,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.18),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: c.bg, width: 1),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    _initialFor(app.appName),
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
+            children: [
+              ...List.generate(shown.length, (i) {
+                final color = _colorFor(shown[i].appName);
+                return Positioned(
+                  left: i * (size - overlap),
+                  child: Container(
+                    width: size, height: size,
+                    decoration: BoxDecoration(
                       color: color,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: c.bgSubtle, width: 1.5),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _initialFor(shown[i].appName),
+                      style: const TextStyle(
+                        fontSize: 10.5, fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              if (extra > 0)
+                Positioned(
+                  left: shown.length * (size - overlap),
+                  child: Container(
+                    width: size, height: size,
+                    decoration: BoxDecoration(
+                      color: c.bgMuted,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: c.bgSubtle, width: 1.5),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '+$extra',
+                      style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w600,
+                        color: c.textMuted,
+                      ),
                     ),
                   ),
                 ),
-              );
-            }),
+            ],
           ),
         ),
         const SizedBox(width: 10),
-        // App name list
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: apps.take(3).map((app) {
-              return Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      app.appName,
-                      style: TextStyle(fontSize: 11, color: c.textMuted),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    _fmtHMS(app.duration),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      color: c.textSubtle,
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
+        Text(
+          '${apps.length} aplikasi',
+          style: TextStyle(fontSize: 12, color: c.textMuted),
         ),
       ],
     );
@@ -834,39 +855,32 @@ class _AppStack extends StatelessWidget {
 
 class _DayStat extends StatelessWidget {
   final AppColors c;
-  final String value;
   final String label;
-  final Color? valueColor;
-
-  const _DayStat({
-    required this.c,
-    required this.value,
-    required this.label,
-    this.valueColor,
-  });
+  final String value;
+  final Color? accent;
+  const _DayStat({required this.c, required this.label, required this.value, this.accent});
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 12.5,
             fontFamily: 'monospace',
-            fontWeight: FontWeight.w600,
-            color: valueColor ?? c.text,
+            fontWeight: FontWeight.w500,
+            color: accent ?? c.text,
+            height: 1.1,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
         Text(
           label.toUpperCase(),
           style: TextStyle(
-            fontSize: 10,
-            letterSpacing: 0.05,
-            color: c.textSubtle,
+            fontSize: 10, letterSpacing: 0.04, color: c.textSubtle,
           ),
         ),
       ],
@@ -879,182 +893,111 @@ class _DayStat extends StatelessWidget {
 class _DayDetail extends StatelessWidget {
   final AppColors c;
   final HistoryDay day;
-
   const _DayDetail({required this.c, required this.day});
 
   @override
   Widget build(BuildContext context) {
+    final apps      = day.topApps;
+    final totalSec  = day.totalActive.inSeconds;
+    final isToday   = _isToday(day.date);
+
     return Container(
       color: c.bgSubtle,
-      padding: const EdgeInsets.only(left: 138, right: 16, top: 12, bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Left column: timeline + top apps
-          Expanded(
-            flex: 14,
+          Divider(height: 1, thickness: 1, color: c.borderSoft),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(138, 14, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SessionTimeline(c: c, day: day),
-                const SizedBox(height: 12),
-                if (day.topApps.isNotEmpty) ...[
+
+                // ── Apps used ────────────────────────────────────────
+                if (apps.isNotEmpty) ...[
                   Text(
-                    'APP TERATAS',
+                    'Aplikasi yang dibuka (${apps.length})',
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.06,
-                      color: c.textSubtle,
+                      fontSize: 11, fontWeight: FontWeight.w600,
+                      letterSpacing: 0.03, color: c.textSubtle,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  ...day.topApps.take(5).map((app) => _TopAppRow(c: c, app: app)),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: c.bg,
+                      border: Border.all(color: c.border),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: List.generate(apps.length, (i) {
+                        final pct = totalSec > 0
+                            ? (apps[i].duration.inSeconds / totalSec).clamp(0.0, 1.0)
+                            : 0.0;
+                        return _DetailAppRow(
+                          c: c, app: apps[i], pct: pct, isFirst: i == 0,
+                        );
+                      }),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 20),
-          // Right column: recordings + screenshots + actions
-          Expanded(
-            flex: 10,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _RecordingsList(c: c, day: day),
-                const SizedBox(height: 12),
-                _ScreenshotTile(c: c, day: day),
-                const SizedBox(height: 12),
-                _ActionButtons(c: c),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
-// ─── Session Timeline ─────────────────────────────────────────────────────────
-
-class _SessionTimeline extends StatelessWidget {
-  final AppColors c;
-  final HistoryDay day;
-
-  const _SessionTimeline({required this.c, required this.day});
-
-  @override
-  Widget build(BuildContext context) {
-    const spanStart = 6; // 06:00
-    const spanEnd = 18; // 18:00
-    const spanHours = spanEnd - spanStart;
-    final now = DateTime.now();
-    final isToday = day.date.year == now.year &&
-        day.date.month == now.month &&
-        day.date.day == now.day;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'TIMELINE SESI',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.06,
-            color: c.textSubtle,
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Visual bar
-        LayoutBuilder(builder: (context, constraints) {
-          final barWidth = constraints.maxWidth;
-          return Column(
-            children: [
-              Container(
-                height: 20,
-                width: barWidth,
-                decoration: BoxDecoration(
-                  color: c.bgMuted,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Stack(
+                // ── Rekaman + Screenshot links ────────────────────────
+                Row(
                   children: [
-                    ...day.sessions.map((session) {
-                      final startH = session.startTime.hour + session.startTime.minute / 60.0;
-                      final endH = session.endTime.hour + session.endTime.minute / 60.0;
-                      final left = ((startH - spanStart) / spanHours).clamp(0.0, 1.0) * barWidth;
-                      final right = ((endH - spanStart) / spanHours).clamp(0.0, 1.0) * barWidth;
-                      final width = (right - left).clamp(2.0, barWidth);
-                      final isLive = isToday && session.endTime.isAfter(now.subtract(const Duration(minutes: 5)));
-                      return Positioned(
-                        left: left,
-                        top: 2,
-                        bottom: 2,
-                        width: width,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isLive
-                                ? c.danger.withValues(alpha: 0.8)
-                                : c.accent.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                      );
-                    }),
+                    Expanded(
+                      child: _DetailLink(
+                        c: c,
+                        icon: Icons.videocam_outlined,
+                        label: 'Rekaman',
+                        value: '${day.totalRecordings} file',
+                        sub: 'Klik untuk lihat daftar',
+                        onTap: () => _showRecordingsDialog(context, c, day),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _DetailLink(
+                        c: c,
+                        icon: Icons.photo_camera_outlined,
+                        label: 'Screenshot',
+                        value: '${day.totalScreenshots} gambar',
+                        sub: 'Klik untuk lihat semua',
+                        onTap: () => _showScreenshotsDialog(context, c, day),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              // Time labels
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: ['06:00', '09:00', '12:00', '15:00', '18:00'].map((t) {
-                    return Text(
-                      t,
-                      style: TextStyle(fontSize: 9, color: c.textFaint, fontFamily: 'monospace'),
-                    );
-                  }).toList(),
+
+                // ── Footer actions ────────────────────────────────────
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _SmallBtn(
+                      c: c, icon: Icons.download_outlined,
+                      label: 'Ekspor hari ini',
+                      onTap: () => _exportDayCsv(context, day),
+                    ),
+                    const SizedBox(width: 8),
+                    _SmallBtn(
+                      c: c, icon: Icons.folder_open_outlined,
+                      label: 'Buka folder',
+                      onTap: () => _openDayFolder(context, day),
+                    ),
+                    const Spacer(),
+                    if (!isToday)
+                      _SmallBtn(
+                        c: c, icon: Icons.delete_outline,
+                        label: 'Hapus data hari ini',
+                        onTap: () { _deleteDayData(context, c, day); },
+                        danger: true,
+                      ),
+                  ],
                 ),
-              ),
-            ],
-          );
-        }),
-        const SizedBox(height: 8),
-        // Session list rows
-        ...day.sessions.map((session) => _SessionRow(c: c, session: session)),
-      ],
-    );
-  }
-}
-
-class _SessionRow extends StatelessWidget {
-  final AppColors c;
-  final HistorySession session;
-
-  const _SessionRow({required this.c, required this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.only(right: 6, top: 1),
-            decoration: BoxDecoration(shape: BoxShape.circle, color: c.accent),
-          ),
-          Text(
-            '${_fmtTime(session.startTime)} – ${_fmtTime(session.endTime)}',
-            style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: c.textMuted),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _fmtHMS(session.activeDuration),
-            style: TextStyle(fontSize: 11, color: c.success),
+              ],
+            ),
           ),
         ],
       ),
@@ -1062,46 +1005,79 @@ class _SessionRow extends StatelessWidget {
   }
 }
 
-class _TopAppRow extends StatelessWidget {
+// ─── Detail App Row ───────────────────────────────────────────────────────────
+
+class _DetailAppRow extends StatelessWidget {
   final AppColors c;
   final AppUsageSummary app;
+  final double pct; // 0.0–1.0
+  final bool isFirst;
 
-  const _TopAppRow({required this.c, required this.app});
+  const _DetailAppRow({
+    required this.c, required this.app, required this.pct, required this.isFirst,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = _colorFor(app.appName);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+    return Container(
+      decoration: isFirst
+          ? null
+          : BoxDecoration(border: Border(top: BorderSide(color: c.borderSoft))),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Row(
         children: [
+          // Square avatar
           Container(
-            width: 18,
-            height: 18,
+            width: 22, height: 22,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+              color: color, borderRadius: BorderRadius.circular(5),
             ),
             alignment: Alignment.center,
             child: Text(
               _initialFor(app.appName),
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: color),
+              style: const TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white,
+              ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 10),
+          // Name + progress bar
           Expanded(
-            child: Text(
-              app.appName,
-              style: TextStyle(fontSize: 12, color: c.textMuted),
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  app.appName,
+                  style: TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w500, color: c.text,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: pct,
+                    backgroundColor: c.bgMuted,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                    minHeight: 4,
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 10),
+          // Duration
           Text(
-            _fmtHMS(app.duration),
+            _fmtHHMM(app.duration),
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontFamily: 'monospace',
-              color: c.textSubtle,
+              color: c.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -1110,231 +1086,642 @@ class _TopAppRow extends StatelessWidget {
   }
 }
 
-// ─── Recordings List ──────────────────────────────────────────────────────────
+// ─── Detail Link ──────────────────────────────────────────────────────────────
 
-class _RecordingsList extends StatelessWidget {
+class _DetailLink extends StatefulWidget {
   final AppColors c;
-  final HistoryDay day;
+  final IconData icon;
+  final String label;
+  final String value;
+  final String sub;
+  final VoidCallback onTap;
 
-  const _RecordingsList({required this.c, required this.day});
+  const _DetailLink({
+    required this.c, required this.icon, required this.label,
+    required this.value, required this.sub, required this.onTap,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final recordings = day.allRecordings;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'REKAMAN',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.06,
-            color: c.textSubtle,
-          ),
-        ),
-        const SizedBox(height: 6),
-        if (recordings.isEmpty)
-          Text(
-            'Tidak ada rekaman',
-            style: TextStyle(fontSize: 12, color: c.textFaint, fontStyle: FontStyle.italic),
-          )
-        else
-          ...recordings.take(5).map((path) {
-            final file = File(path);
-            final name = path.split(Platform.pathSeparator).last;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.videocam_outlined, size: 13, color: c.textSubtle),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: c.textMuted,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (file.existsSync())
-                    FutureBuilder<int>(
-                      future: file.length(),
-                      builder: (_, snap) {
-                        if (!snap.hasData) return const SizedBox.shrink();
-                        final kb = (snap.data! / 1024).toStringAsFixed(0);
-                        return Text(
-                          '${kb}KB',
-                          style: TextStyle(fontSize: 10, color: c.textSubtle),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            );
-          }),
-      ],
-    );
-  }
+  State<_DetailLink> createState() => _DetailLinkState();
 }
 
-// ─── Screenshot Tile ──────────────────────────────────────────────────────────
-
-class _ScreenshotTile extends StatelessWidget {
-  final AppColors c;
-  final HistoryDay day;
-
-  const _ScreenshotTile({required this.c, required this.day});
+class _DetailLinkState extends State<_DetailLink> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
-    final count = day.totalScreenshots;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: c.bg,
-        border: Border.all(color: c.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final c = widget.c;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            color: _hover ? c.bgHover : c.bg,
+            border: Border.all(color: _hover ? c.borderStrong : c.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
             children: [
-              Icon(Icons.photo_camera_outlined, size: 13, color: c.textSubtle),
-              const SizedBox(width: 5),
-              Text(
-                'Screenshot',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: c.textMuted,
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: c.accentSoft,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(widget.icon, size: 15, color: c.accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          widget.label,
+                          style: TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w500, color: c.text,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.value,
+                          style: TextStyle(
+                            fontSize: 12, fontFamily: 'monospace', color: c.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      widget.sub,
+                      style: TextStyle(fontSize: 11, color: c.textSubtle),
+                    ),
+                  ],
                 ),
               ),
-              const Spacer(),
-              Text(
-                '$count',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  fontWeight: FontWeight.w600,
-                  color: c.text,
-                ),
-              ),
+              Icon(Icons.chevron_right, size: 14, color: c.textSubtle),
             ],
           ),
-          const SizedBox(height: 8),
-          // 3×2 placeholder grid
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 4,
-              mainAxisSpacing: 4,
-              childAspectRatio: 16 / 9,
-            ),
-            itemCount: 6,
-            itemBuilder: (_, i) => Container(
-              decoration: BoxDecoration(
-                color: c.bgMuted,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Icon(Icons.image_outlined, size: 14, color: c.textFaint),
-            ),
-          ),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () {},
-            child: Text(
-              'Lihat semua →',
-              style: TextStyle(
-                fontSize: 11,
-                color: c.accent,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ─── Action Buttons ───────────────────────────────────────────────────────────
+// ─── Small Buttons ────────────────────────────────────────────────────────────
 
-class _ActionButtons extends StatelessWidget {
-  final AppColors c;
-
-  const _ActionButtons({required this.c});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _ActionBtn(
-          c: c,
-          icon: Icons.download_outlined,
-          label: 'Ekspor',
-          onTap: () {},
-        ),
-        const SizedBox(width: 6),
-        _ActionBtn(
-          c: c,
-          icon: Icons.folder_open_outlined,
-          label: 'Buka folder',
-          onTap: () {},
-        ),
-        const SizedBox(width: 6),
-        _ActionBtn(
-          c: c,
-          icon: Icons.delete_outline,
-          label: 'Hapus data',
-          onTap: () {},
-          danger: true,
-        ),
-      ],
-    );
-  }
-}
-
-class _ActionBtn extends StatelessWidget {
+class _SmallBtn extends StatefulWidget {
   final AppColors c;
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool danger;
 
-  const _ActionBtn({
-    required this.c,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
+  const _SmallBtn({
+    required this.c, required this.icon, required this.label,
+    required this.onTap, this.danger = false,
   });
 
   @override
+  State<_SmallBtn> createState() => _SmallBtnState();
+}
+
+class _SmallBtnState extends State<_SmallBtn> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
-    final fg = danger ? c.danger : c.textMuted;
-    final bg = danger ? c.dangerSoft : c.bgMuted;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: bg,
-          border: Border.all(color: danger ? c.danger.withValues(alpha: 0.3) : c.border),
-          borderRadius: BorderRadius.circular(6),
+    final c  = widget.c;
+    final fg = widget.danger ? c.danger : c.textMuted;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: _hover
+                ? (widget.danger ? c.dangerSoft : c.bgMuted)
+                : Colors.transparent,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icon, size: 12, color: fg),
+              const SizedBox(width: 4),
+              Text(widget.label, style: TextStyle(fontSize: 11, color: fg)),
+            ],
+          ),
         ),
-        child: Row(
+      ),
+    );
+  }
+}
+
+class _SmallOutlineBtn extends StatefulWidget {
+  final AppColors c;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SmallOutlineBtn({
+    required this.c, required this.icon, required this.label, required this.onTap,
+  });
+
+  @override
+  State<_SmallOutlineBtn> createState() => _SmallOutlineBtnState();
+}
+
+class _SmallOutlineBtnState extends State<_SmallOutlineBtn> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: _hover ? c.bgMuted : c.bg,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icon, size: 13, color: c.textMuted),
+              const SizedBox(width: 6),
+              Text(widget.label, style: TextStyle(fontSize: 12, color: c.textMuted)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Recordings Dialog ────────────────────────────────────────────────────────
+
+class _RecordingsDialog extends StatelessWidget {
+  final AppColors c;
+  final HistoryDay day;
+  const _RecordingsDialog({required this.c, required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    final files = day.allRecordings;
+    return Dialog(
+      backgroundColor: c.bg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+              child: Row(
+                children: [
+                  Text('Rekaman — ${_dayLabel(day.date)}',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.text)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, size: 16, color: c.textMuted),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Divider(height: 1, color: c.borderSoft),
+            if (files.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(child: Text('Tidak ada file rekaman',
+                    style: TextStyle(color: c.textMuted, fontSize: 13))),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 400),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: files.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  itemBuilder: (_, i) => _RecordingFileRow(c: c, path: files[i]),
+                ),
+              ),
+            Divider(height: 1, color: c.borderSoft),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              child: Row(
+                children: [
+                  Text('${files.length} file',
+                      style: TextStyle(fontSize: 12, color: c.textSubtle)),
+                  const Spacer(),
+                  _SmallBtn(
+                    c: c, icon: Icons.folder_open_outlined, label: 'Buka folder',
+                    onTap: () => _openDayFolder(context, day),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecordingFileRow extends StatefulWidget {
+  final AppColors c;
+  final String path;
+  const _RecordingFileRow({required this.c, required this.path});
+
+  @override
+  State<_RecordingFileRow> createState() => _RecordingFileRowState();
+}
+
+class _RecordingFileRowState extends State<_RecordingFileRow> {
+  bool _hover = false;
+  int? _sizeBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSize();
+  }
+
+  Future<void> _loadSize() async {
+    try {
+      final f = File(widget.path);
+      if (await f.exists()) {
+        final s = await f.length();
+        if (mounted) setState(() => _sizeBytes = s);
+      }
+    } catch (_) {}
+  }
+
+  String get _name => widget.path.split(Platform.pathSeparator).last;
+
+  String get _sizeStr {
+    final s = _sizeBytes;
+    if (s == null) return '…';
+    if (s < 1024 * 1024) return '${(s / 1024).toStringAsFixed(0)} KB';
+    return '${(s / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: () => Process.run('open', [widget.path]),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          decoration: BoxDecoration(
+            color: _hover ? c.bgHover : c.bgSubtle,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.videocam_outlined, size: 14, color: c.accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_name,
+                    style: TextStyle(fontSize: 12, color: c.text),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 8),
+              Text(_sizeStr,
+                  style: TextStyle(
+                      fontSize: 11, color: c.textMuted, fontFamily: 'monospace')),
+              const SizedBox(width: 8),
+              Icon(Icons.open_in_new, size: 12, color: c.textSubtle),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Screenshots Dialog ───────────────────────────────────────────────────────
+
+class _ScreenshotsDialog extends StatefulWidget {
+  final AppColors c;
+  final HistoryDay day;
+  const _ScreenshotsDialog({required this.c, required this.day});
+
+  @override
+  State<_ScreenshotsDialog> createState() => _ScreenshotsDialogState();
+}
+
+class _ScreenshotsDialogState extends State<_ScreenshotsDialog> {
+  List<String> _paths = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scan();
+  }
+
+  Future<void> _scan() async {
+    final d     = widget.day.date;
+    final year  = d.year.toString();
+    final month = d.month.toString().padLeft(2, '0');
+    final day   = d.day.toString().padLeft(2, '0');
+    final sep   = Platform.pathSeparator;
+    final base  = _baseDir();
+    final paths = <String>[];
+
+    // New year/month/day structure
+    final newDir = Directory('$base$sep$year$sep$month$sep$day');
+    if (await newDir.exists()) {
+      await for (final f in newDir.list()) {
+        final name = f.path.split(sep).last;
+        if (f is File && name.startsWith('SCR_') && name.endsWith('.jpg')) {
+          paths.add(f.path);
+        }
+      }
+    }
+
+    // Legacy Screenshots folder
+    final dateStr  = '$year$month$day';
+    final legacyDir = Directory('$base${sep}Screenshots');
+    if (await legacyDir.exists()) {
+      await for (final f in legacyDir.list()) {
+        final name = f.path.split(sep).last;
+        if (f is File && name.startsWith('SCR_$dateStr') && name.endsWith('.jpg')) {
+          paths.add(f.path);
+        }
+      }
+    }
+
+    paths.sort();
+    if (mounted) setState(() { _paths = paths; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return Dialog(
+      backgroundColor: c.bg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 620,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+              child: Row(
+                children: [
+                  Text('Screenshot — ${_dayLabel(widget.day.date)}',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.text)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, size: 16, color: c.textMuted),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Divider(height: 1, color: c.borderSoft),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_paths.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(child: Text('Tidak ada file screenshot',
+                    style: TextStyle(color: c.textMuted, fontSize: 13))),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(12),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 16 / 9,
+                  ),
+                  itemCount: _paths.length,
+                  itemBuilder: (_, i) => _ScreenshotThumbnail(
+                    c: c, path: _paths[i], index: i, allPaths: _paths,
+                  ),
+                ),
+              ),
+            Divider(height: 1, color: c.borderSoft),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              child: Row(
+                children: [
+                  Text('${_paths.length} gambar',
+                      style: TextStyle(fontSize: 12, color: c.textSubtle)),
+                  const Spacer(),
+                  _SmallBtn(
+                    c: c, icon: Icons.folder_open_outlined, label: 'Buka folder',
+                    onTap: () => _openDayFolder(context, widget.day),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScreenshotThumbnail extends StatefulWidget {
+  final AppColors c;
+  final String path;
+  final int index;
+  final List<String> allPaths;
+  const _ScreenshotThumbnail({
+    required this.c, required this.path,
+    required this.index, required this.allPaths,
+  });
+
+  @override
+  State<_ScreenshotThumbnail> createState() => _ScreenshotThumbnailState();
+}
+
+class _ScreenshotThumbnailState extends State<_ScreenshotThumbnail> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit:  (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => _ScreenshotFullscreenDialog(
+            c: c, index: widget.index, allPaths: widget.allPaths,
+          ),
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: _hover ? c.accent : c.border,
+              width: _hover ? 1.5 : 1,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Image.file(
+            File(widget.path),
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: c.bgSubtle,
+              child: Icon(Icons.broken_image_outlined, size: 24, color: c.textFaint),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScreenshotFullscreenDialog extends StatefulWidget {
+  final AppColors c;
+  final int index;
+  final List<String> allPaths;
+  const _ScreenshotFullscreenDialog({
+    required this.c, required this.index, required this.allPaths,
+  });
+
+  @override
+  State<_ScreenshotFullscreenDialog> createState() =>
+      _ScreenshotFullscreenDialogState();
+}
+
+class _ScreenshotFullscreenDialogState
+    extends State<_ScreenshotFullscreenDialog> {
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.index;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final path = widget.allPaths[_current];
+    final name = path.split(Platform.pathSeparator).last;
+    final total = widget.allPaths.length;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF0A0A0A),
+      insetPadding: const EdgeInsets.all(16),
+      child: SizedBox(
+        width: 960,
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 12, color: fg),
-            const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: fg)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(name,
+                        style: const TextStyle(fontSize: 12, color: Colors.white54),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => Process.run('open', ['-R', path]),
+                    icon: const Icon(Icons.folder_open_outlined, size: 13, color: Colors.white38),
+                    label: const Text('Buka di Finder',
+                        style: TextStyle(fontSize: 12, color: Colors.white38)),
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, size: 16, color: Colors.white38),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ),
+            Image.file(
+              File(path),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const SizedBox(
+                height: 280,
+                child: Center(
+                  child: Icon(Icons.broken_image_outlined, size: 48, color: Colors.white12),
+                ),
+              ),
+            ),
+            if (total > 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: _current > 0
+                          ? () => setState(() => _current--)
+                          : null,
+                      icon: Icon(Icons.chevron_left,
+                          color: _current > 0 ? Colors.white54 : Colors.white12),
+                    ),
+                    Text('${_current + 1} / $total',
+                        style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                    IconButton(
+                      onPressed: _current < total - 1
+                          ? () => setState(() => _current++)
+                          : null,
+                      icon: Icon(Icons.chevron_right,
+                          color: _current < total - 1 ? Colors.white54 : Colors.white12),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1346,41 +1733,37 @@ class _ActionBtn extends StatelessWidget {
 
 class _InfoBanner extends StatelessWidget {
   final AppColors c;
-
   const _InfoBanner({required this.c});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: c.accentSoft,
-        border: Border.all(color: c.accent.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(10),
+        color: c.bgSubtle,
+        border: Border.all(color: c.borderSoft),
+        borderRadius: BorderRadius.circular(7),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.shield_outlined, size: 16, color: c.accent),
+          Icon(Icons.info_outline, size: 13, color: c.textSubtle),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Data Anda aman — disimpan secara lokal',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: c.text,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Semua data riwayat aktivitas disimpan hanya di perangkat ini menggunakan Hive. Tidak ada data yang dikirim ke server eksternal.',
-                  style: TextStyle(fontSize: 12, color: c.textMuted),
-                ),
-              ],
+            child: Text(
+              'Data tersimpan otomatis. Stop/start monitor tidak menghapus data — '
+              'sesi baru ditambahkan ke hari berjalan.',
+              style: TextStyle(fontSize: 11.5, color: c.textMuted),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {},
+            child: Text(
+              'Pengaturan retensi →',
+              style: TextStyle(
+                fontSize: 11, color: c.textMuted, fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

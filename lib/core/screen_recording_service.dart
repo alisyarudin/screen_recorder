@@ -244,11 +244,18 @@ class ScreenRecordingService {
   }) async {
     if (isRecording) return currentFile;
 
-    final dir = Directory(outputDir);
+    final now    = DateTime.now();
+    final year   = now.year.toString();
+    final month  = now.month.toString().padLeft(2, '0');
+    final day    = now.day.toString().padLeft(2, '0');
+    final sep    = Platform.pathSeparator;
+    final dailyDir = '$outputDir$sep$year$sep$month$sep$day';
+
+    final dir = Directory(dailyDir);
     if (!await dir.exists()) await dir.create(recursive: true);
 
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final outputPath = '$outputDir${Platform.pathSeparator}REC_$timestamp.mp4';
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final outputPath = '$dailyDir${sep}REC_$timestamp.mp4';
 
     if (Platform.isMacOS) {
       return _macosStart(
